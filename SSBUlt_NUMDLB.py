@@ -26,7 +26,7 @@ bl_info = {
     "tracker_url": "https://gitlab.com/Worldblender/io_scene_numdlb/issues",
     "category": "Import-Export"}
 
-import bmesh, bpy, bpy_extras, mathutils, os, os.path, struct, string, sys, time
+import bmesh, bpy, bpy_extras, mathutils, os, struct, string, sys, time
 from progress_report import ProgressReport, ProgressReportSubstep
 
 def reinterpretCastIntToFloat(int_val):
@@ -118,49 +118,49 @@ class WeightGrpStruct:
         self.rigInfOffset = 0
         self.rigInfCount =  0
 
-def getModelInfo(self, context, filepath):
-    BoneCount = 0
+def getModelInfo(self, context, MDLName):
     MODLGrp_array = []
 
-    MDLName = os.path.splitext((os.path.basename(filepath)))[0]
     if os.path.isfile(MDLName):
         with open(MDLName, 'rb') as md:
-            #p = getFilenamePath MDLName
+            p = os.path.dirname(MDLName)
             #struct MODLStruct (MSHGrpName, MSHMatName)
 
-            md.seek(0x10) #seek_set
+            md.seek(0x10, 0)
             # Reads the model file to find information about the other files
             MODLCheck = struct.unpack('<L', md.read(4))[0]
             if (MODLCheck == 0x4D4F444C):
                 MODLVerA = struct.unpack('<H', md.read(2))[0] #unsigned
                 MODLVerB = struct.unpack('<H', md.read(2))[0] #unsigned
-                MODLNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04) #seek_cur
-                SKTNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04) #seek_cur
-                MATNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04) #seek_cur
-                md.seek(0x10) #seek_cur
-                MSHNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04) #seek_cur
-                MSHDatOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04) #seek_cur
+                MODLNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
+                SKTNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
+                MATNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
+                md.seek(0x10, 1)
+                MSHNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
+                MSHDatOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
                 MSHDatCount = struct.unpack('<L', md.read(4))[0]
-                md.seek(SKTNameOff) #seek_set
-                SKTName = (p + md.readline())
-                md.seek(MATNameOff) #seek_set
-                MATNameStrLen = struct.unpack('<L', md.read(4))[0]; md.seek(0x04) #seek_cur
-                MATName = (p + md.readline())
-                md.seek(MSHNameOff) #seek_set
-                MSHName = (p + md.readline()); md.seek(0x04) #seek_cur
-                md.seek(MSHDatOff) #seek_set
+                md.seek(SKTNameOff, 0)
+                SKTName = p + str(md.read(12))
+                md.seek(MATNameOff, 0)
+                MATNameStrLen = struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
+                MATName = p + str(md.read(12))
+                md.seek(MSHNameOff, 0)
+                MSHName = p + str(md.read(12)); md.seek(0x04, 1)
+                md.seek(MSHDatOff, 0)
                 for g in range(MSHDatCount):
-                    MSHGrpNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04) #seek_cur
-                    MSHUnkNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04) #seek_cur
-                    MSHMatNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04) #seek_cur
+                    ge = MODLStruct()
+                    MSHGrpNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
+                    MSHUnkNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
+                    MSHMatNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
                     MSHRet = md.tell()
-                    md.seek(MSHGrpNameOff) #seek_set
-                    MSHGrpName = md.readline()
-                    md.seek(MSHMatNameOff) #seek_set
-                    MSHMatName = md.readline()
-                    # MODLGrp_array.append(MODLStruct MSHGrpName:MSHGrpName MSHMatName:MSHMatName)
-                    md.seek(MSHRet) #seek_set
-                print(MODLGrp_array)
+                    md.seek(MSHGrpNameOff, 0)
+                    ge.meshGroupName = md.readline()
+                    md.seek(MSHMatNameOff, 0)
+                    ge.meshMaterialName = md.readline()
+                    # append MODLGrp_array (MODLStruct MSHGrpName:MSHGrpName MSHMatName:MSHMatName)
+                    MODLGrp_array.append(ge)
+                    md.seek(MSHRet, 0)
+                #print(MODLGrp_array)
 
                 if os.path.isfile(MATName):
                     importMaterials(MATName)
@@ -176,14 +176,14 @@ def importMaterials(MATName):
     with open(MATName, 'rb') as mt:
         # struct MatStruct (MatName, MatColName, MatCol2Name, MatBakeName, MatNorName, MatEmiName, atEmi2Name, MatPrmName, MatEnvName)
 
-        mt.seek(0x10) #seek_set
+        mt.seek(0x10, 0)
         MATCheck = struct.unpack('<L', mt.read(4))[0]
         if (MATCheck == 0x4D41544C):
             MATVerA = struct.unpack('<H', mt.read(2))[0] #unsigned
             MATVerB = struct.unpack('<H', mt.read(2))[0] #unsigned
-            MATHeadOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04) #seek_cur
-            MATCount = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04) #seek_cur
-            mt.seek(MATHeadOff) #seek_set
+            MATHeadOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
+            MATCount = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
+            mt.seek(MATHeadOff, 0)
             for m in range(MATCount):
                 MatColName = ""
                 MatCol2Name = ""
@@ -193,26 +193,26 @@ def importMaterials(MATName):
                 MatEmi2Name = ""
                 MatPrmName = ""
                 MatEnvName = ""
-                MATNameOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04) #seek_cur
-                MATParamGrpOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04) #seek_cur
-                MATParamGrpCount = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04) #seek_cur
-                MATShdrNameOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04) #seek_cur
+                MATNameOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
+                MATParamGrpOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
+                MATParamGrpCount = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
+                MATShdrNameOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
                 MATRet = mt.tell()
-                mt.seek(MATNameOff) #seek_set
+                mt.seek(MATNameOff, 0)
                 MatName = mt.readline()
                 print("Textures for " + MatName + ":")
-                mt.seek(MATParamGrpOff) #seek_set
+                mt.seek(MATParamGrpOff, 0)
                 for p in range(MATParamGrpCount):
-                    MatParamID = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04) #seek_cur
-                    MatParamOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04) #seek_cur
-                    MatParamType = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04) #seek_cur
+                    MatParamID = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
+                    MatParamOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
+                    MatParamType = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
                     MatParamRet = mt.tell()
                     if (MatParamType == 0x0B):
-                        mt.seek(MatParamOff + 0x08) #seek_set
+                        mt.seek(MatParamOff + 0x08, 0)
                         TexName = mt.readline()
-                        # print("(" + bit.intAsHex(MatParamID) + ") for " + TexName)
+                        print("(" + hex(MatParamID) + ") for " + TexName)
                         case MatParamID of(
-                            #default:(print("Unknown type (" + bit.intAsHex(MatParamID) as string + ") for " + TexName as string))
+                            #default:(print("Unknown type (" + hex(MatParamID) + ") for " + TexName))
                             0x5C:(MatColName = TexName)
                             0x5D:(MatCol2Name = TexName)
                             0x5F:(MatBakeName = TexName)
@@ -226,11 +226,11 @@ def importMaterials(MATName):
                             0x6A:(MatEmi2Name = TexName; if MatCol2Name == "" do(MatCol2Name = TexName))
                             0x133:() # "noise_for_warp"
                         )
-                        mt.seek(MatParamRet) #seek_set
+                        mt.seek(MatParamRet, 0)
 
                 print("-----")
                 # Materials_array.append(MatStruct MatName:MatName MatColName:MatColName MatCol2Name:MatCol2Name MatBakeName:MatBakeName MatNorName:MatNorName MatEmiName:MatEmiName MatEmi2Name:MatEmi2Name MatPrmName:MatPrmName MatEnvName:MatEnvName)
-                mt.seek(MATRet) #seek_set
+                mt.seek(MATRet, 0)
             )
         )
             multimat = MultiMaterial()
@@ -252,6 +252,7 @@ def importMaterials(MATName):
 
 # Imports the skeleton
 def importSkeleton(SKTName):
+    BoneCount = 0
     BoneArray = []
     BoneFixArray = []
     BoneTrsArray = []
@@ -259,35 +260,35 @@ def importSkeleton(SKTName):
     BoneName_array = []
 
     with open(SKTName, 'rb') as b:
-        b.seek(0x10) #seek_set
+        b.seek(0x10, 0)
         BoneCheck = struct.unpack('<L', b.read(4))[0]
         if (BoneCheck == 0x534B454C):
-            b.seek(0x18) #seek_set
-            BoneOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04) #seek_cur
-            BoneCount = struct.unpack('<L', b.read(4))[0]; b.seek(0x04) #seek_cur
-            BoneMatrOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04) #seek_cur
-            BoneMatrCount = struct.unpack('<L', b.read(4))[0]; b.seek(0x04) #seek_cur
-            BoneInvMatrOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04) #seek_cur
-            BoneInvMatrCount = struct.unpack('<L', b.read(4))[0]; b.seek(0x04) #seek_cur
-            BoneRelMatrOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04) #seek_cur
-            BoneRelMatrCount = struct.unpack('<L', b.read(4))[0]; b.seek(0x04) #seek_cur
-            BoneRelMatrInvOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04) #seek_cur
-            BoneRelMatrInvCount = struct.unpack('<L', b.read(4))[0]; b.seek(0x04) #seek_cur
-            b.seek(BoneOffset) #seek_set
+            b.seek(0x18, 0)
+            BoneOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04, 1)
+            BoneCount = struct.unpack('<L', b.read(4))[0]; b.seek(0x04, 1)
+            BoneMatrOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04, 1)
+            BoneMatrCount = struct.unpack('<L', b.read(4))[0]; b.seek(0x04, 1)
+            BoneInvMatrOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04, 1)
+            BoneInvMatrCount = struct.unpack('<L', b.read(4))[0]; b.seek(0x04, 1)
+            BoneRelMatrOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04, 1)
+            BoneRelMatrCount = struct.unpack('<L', b.read(4))[0]; b.seek(0x04, 1)
+            BoneRelMatrInvOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04, 1)
+            BoneRelMatrInvCount = struct.unpack('<L', b.read(4))[0]; b.seek(0x04, 1)
+            b.seek(BoneOffset, 0)
 
             for c in range(BoneCount):
-                BoneNameOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04) #seek_cur
+                BoneNameOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04, 1)
                 BoneRet = b.tell()
-                b.seek(BoneNameOffset) #seek_set
+                b.seek(BoneNameOffset, 0)
                 BoneName = b.readline()
-                b.seek(BoneRet) #seek_set
+                b.seek(BoneRet, 0)
                 BoneID = struct.unpack('<H', b.read(2))[0]
                 BoneParent = struct.unpack('<H', b.read(2))[0] + 1
                 BoneUnk = struct.unpack('<L', b.read(4))[0]
                 BoneParent_array.append(BoneParent)
                 BoneName_array.append(BoneName)
 
-            b.seek(BoneMatrOffset) #seek_set
+            b.seek(BoneMatrOffset, 0)
 
             for c in range(BoneCount):
                 m11 = ('<f', b.read(4))[0]; m12 = ('<f', b.read(4))[0]; m13 = ('<f', b.read(4))[0]; m14 = ('<f', b.read(4))[0]
@@ -335,28 +336,28 @@ def importMeshes(MSHName):
         # struct PolyGrpStruct (VisGrpName, SingleBindName, FacepointCount, FacepointStart, FaceLongBit, VertCount, VertStart, VertStride, UVStart, UVStride, BuffParamStart, BuffParamCount)
         # struct WeightGrpStruct (GrpName, SubGroupNum, WeightInfMax, WeightFlag2, WeightFlag3, WeightFlag4, RigInfOffset, RigInfCount)
 
-        f.seek(0x10) #seek_set
+        f.seek(0x10, 0)
         MSHCheck = struct.unpack('<L', f.read(4))[0]
         if (MSHCheck == 0x4D455348):
-            f.seek(0x88) #seek_set
-            PolyGrpInfOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            PolyGrpCount = struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            UnkOffset1 = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            UnkCount1 = struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            FaceBuffSizeB = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            VertBuffOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            UnkCount2 = struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            FaceBuffOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            FaceBuffSize = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            WeightBuffOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            WeightCount = struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
+            f.seek(0x88, 0)
+            PolyGrpInfOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            PolyGrpCount = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            UnkOffset1 = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            UnkCount1 = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            FaceBuffSizeB = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            VertBuffOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            UnkCount2 = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            FaceBuffOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            FaceBuffSize = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            WeightBuffOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            WeightCount = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
 
-            f.seek(PolyGrpInfOffset) #seek_set
+            f.seek(PolyGrpInfOffset, 0)
             for g in range(PolyGrpCount):
-                VisGrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-                f.seek(0x04) #seek_cur
+                VisGrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+                f.seek(0x04, 1)
                 Unk1 = struct.unpack('<L', f.read(4))[0]
-                SingleBindNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
+                SingleBindNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 VertCount = struct.unpack('<L', f.read(4))[0]
                 FacepointCount = struct.unpack('<L', f.read(4))[0]
                 Unk2 = struct.unpack('<L', f.read(4))[0] # Always 3?
@@ -374,44 +375,44 @@ def importMeshes(MSHName):
                 Unk8 = struct.unpack('<L', f.read(4))[0] # Either 0 or 1
                 SortPriority = struct.unpack('<L', f.read(4))[0]
                 Unk9 = struct.unpack('<L', f.read(4))[0] # 0, 1, 256 or 257
-                f.seek(0x64) #seek_cur # A bunch of unknown float values.
-                BuffParamStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
+                f.seek(0x64, 1) # A bunch of unknown float values.
+                BuffParamStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 BuffParamCount = struct.unpack('<L', f.read(4))[0]
                 Unk10 = struct.unpack('<L', f.read(4))[0] # Always 0
                 PolyGrpRet = f.tell()
-                f.seek(VisGrpNameOffset) #seek_set
+                f.seek(VisGrpNameOffset, 0)
                 VisGrpName = f.readline()
-                f.seek(SingleBindNameOffset) #seek_set
+                f.seek(SingleBindNameOffset, 0)
                 SingleBindName = f.readline()
                 # PolyGrp_array.append(PolyGrpStruct VisGrpName:VisGrpName SingleBindName:SingleBindName FacepointCount:FacepointCount FacepointStart:FacepointStart FaceLongBit:FaceLongBit VertCount:VertCount VertStart:VertStart VertStride:VertStride UVStart:UVStart UVStride:UVStride BuffParamStart:BuffParamStart BuffParamCount:BuffParamCount)
                 print(VisGrpName + " unknowns: 1: " + Unk1 + " | Off1: " + UnkOff1 + " | 2: " + Unk2 + " | 3: " + Unk3 + " | 4: " + Unk4 + " | 5: " + Unk5 + " | 6: " + Unk6 + " | LongFace: " + FaceLongBit + " | 8: " + Unk8 + " | Sort: " + SortPriority + " | 9: " + Unk9 + " | 10: " + Unk10)
-                f.seek(PolyGrpRet) #seek_set
+                f.seek(PolyGrpRet, 0)
             )
             print(PolyGrp_array)
 
-            f.seek(VertBuffOffset) #seek_set
-            VertOffStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            VertBuffSize = struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            UVOffStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-            UVBuffSize = struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
+            f.seek(VertBuffOffset, 0)
+            VertOffStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            VertBuffSize = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            UVOffStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+            UVBuffSize = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
 
-            f.seek(WeightBuffOffset) #seek_set
+            f.seek(WeightBuffOffset, 0)
 
             for b in range(WeightCount):
-                GrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-                SubGroupNum = struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
+                GrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+                SubGroupNum = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 WeightInfMax = struct.unpack('<B', spm.read(1))[0] #unsigned
                 WeightFlag2 = struct.unpack('<B', spm.read(1))[0] #unsigned
                 WeightFlag3 = struct.unpack('<B', spm.read(1))[0] #unsigned
                 WeightFlag4 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                f.seek(0x04) #seek_cur
-                RigInfOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-                RigInfCount = struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
+                f.seek(0x04, 1)
+                RigInfOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+                RigInfCount = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 WeightRet = f.tell()
-                f.seek(GrpNameOffset) #seek_set
+                f.seek(GrpNameOffset, 0)
                 GrpName = f.readline()
                 # WeightGrp_array.append(WeightGrpStruct GrpName:GrpName SubGroupNum:SubGroupNum WeightInfMax:WeightInfMax WeightFlag2:WeightFlag2 WeightFlag3:WeightFlag3 WeightFlag4:WeightFlag4 RigInfOffset:RigInfOffset RigInfCount:RigInfCount)
-                f.seek(WeightRet) #seek_set
+                f.seek(WeightRet, 0)
 
             print(WeightGrp_array)
 
@@ -425,7 +426,7 @@ def importMeshes(MSHName):
                 Weight_array = []
                 SingleBindID = 0
 
-                f.seek(PolyGrp_array[p].BuffParamStart) #seek_set
+                f.seek(PolyGrp_array[p].BuffParamStart, 0)
 
                 PosFmt = 0; NormFmt = 0; TanFmt = 0; ColorCount = 0; UVCount = 0
 
@@ -436,14 +437,14 @@ def importMeshes(MSHName):
                     BuffParamOffset = struct.unpack('<L', f.read(4))[0]
                     BuffParamLayer = struct.unpack('<L', f.read(4))[0]
                     BuffParamUnk1 = struct.unpack('<L', f.read(4))[0] # always 0?
-                    BuffParamStrOff1 = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-                    BuffParamStrOff2 = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
+                    BuffParamStrOff1 = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+                    BuffParamStrOff2 = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                     BuffParamUnk2 = struct.unpack('<L', f.read(4))[0] # always 1?
                     BuffParamUnk3 = struct.unpack('<L', f.read(4))[0] # always 0?
                     BuffParamRet = f.tell()
-                    f.seek(BuffParamStrOff2) #seek_set
-                    BuffNameOff = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_set
-                    f.seek(BuffNameOff) #seek_set
+                    f.seek(BuffParamStrOff2, 0)
+                    BuffNameOff = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 0)
+                    f.seek(BuffNameOff, 0)
                     BuffName = f.readline()
                     case BuffName of(
                         default: (throw ("Unknown format!"))
@@ -466,10 +467,10 @@ def importMeshes(MSHName):
                         "colorSet6":(ColorCount = ColorCount + 1)
                         "colorSet7":(ColorCount = ColorCount + 1)
                     )
-                    f.seek(BuffParamRet) #seek_set
+                    f.seek(BuffParamRet, 0)
                 )
 
-                f.seek(VertOffStart + PolyGrp_array[p].VertStart) #seek_set
+                f.seek(VertOffStart + PolyGrp_array[p].VertStart, 0)
 
                 print("Vert start: " + f.tell())
                 for v = 1 to PolyGrp_array[p].VertCount do(
@@ -504,7 +505,7 @@ def importMeshes(MSHName):
                 )
                 print("Vert end: " + f.tell())
 
-                f.seek(UVOffStart + PolyGrp_array[p].UVStart) #seek_set
+                f.seek(UVOffStart + PolyGrp_array[p].UVStart, 0)
 
                 print("UV start: " + f.tell())
                 for v = 1 to PolyGrp_array[p].VertCount do(
@@ -576,84 +577,84 @@ def importMeshes(MSHName):
                                 append Alpha_array 1
                         )
                         1:(
-                                colorr = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
                                 append Color_array [colorr,colorg,colorb]; append Alpha_array colora
                         )
                         2:(
-                                colorr = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
-                                colorr2 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg2 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb2 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora2 = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr2 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg2 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb2 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
                                 append Color_array [colorr,colorg,colorb]; append Alpha_array colora
                                 append Color2_array [colorr2,colorg2,colorb2]; append Alpha2_array colora2
                         )
                         3:(
-                                colorr = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
-                                colorr2 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg2 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb2 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora2 = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
-                                colorr3 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg3 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb3 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora3 = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr2 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg2 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb2 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr3 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg3 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb3 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
                                 append Color_array [colorr,colorg,colorb]; append Alpha_array colora
                                 append Color2_array [colorr2,colorg2,colorb2]; append Alpha2_array colora2
                                 append Color3_array [colorr3,colorg3,colorb3]; append Alpha3_array colora3
                         )
                         4:(
-                                colorr = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
-                                colorr2 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg2 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb2 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora2 = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
-                                colorr3 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg3 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb3 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora3 = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
-                                colorr4 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg4 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb4 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora4 = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr2 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg2 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb2 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr3 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg3 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb3 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr4 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg4 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb4 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora4 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
                                 append Color_array [colorr,colorg,colorb]; append Alpha_array colora
                                 append Color2_array [colorr2,colorg2,colorb2]; append Alpha2_array colora2
                                 append Color3_array [colorr3,colorg3,colorb3]; append Alpha3_array colora3
                                 append Color4_array [colorr4,colorg4,colorb4]; append Alpha4_array colora4
                         )
                         5:(
-                                colorr = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
-                                colorr2 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg2 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb2 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora2 = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
-                                colorr3 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg3 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb3 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora3 = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
-                                colorr4 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg4 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb4 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora4 = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
-                                colorr5 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorg5 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colorb5 = struct.unpack('<B', spm.read(1))[0] #unsigned
-                                colora5 = float(struct.unpack('<B', spm.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr2 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg2 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb2 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr3 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg3 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb3 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr4 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg4 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb4 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora4 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr5 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorg5 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colorb5 = struct.unpack('<B', f.read(1))[0] #unsigned
+                                colora5 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
                                 append Color_array [colorr,colorg,colorb]; append Alpha_array colora
                                 append Color2_array [colorr2,colorg2,colorb2]; append Alpha2_array colora2
                                 append Color3_array [colorr3,colorg3,colorb3]; append Alpha3_array colora3
@@ -664,7 +665,7 @@ def importMeshes(MSHName):
                 )
                 print("UV end: " + f.tell())
 
-                f.seek(FaceBuffOffset + PolyGrp_array[p].FacepointStart) #seek_set
+                f.seek(FaceBuffOffset + PolyGrp_array[p].FacepointStart, 0)
                 print("Face start: " + f.tell())
                 for fc = 1 to (PolyGrp_array[p].FacepointCount / 3) do(
                     case PolyGrp_array[p].FaceLongBit of(
@@ -707,18 +708,18 @@ def importMeshes(MSHName):
                             )
                     )
 
-                    f.seek(WeightGrp_array[RigSet].RigInfOffset) #seek_set
+                    f.seek(WeightGrp_array[RigSet].RigInfOffset, 0)
                     print("Rig info start: " + f.tell())
 
                     if WeightGrp_array[RigSet].RigInfCount != 0 then (
                         for x = 1 to WeightGrp_array[RigSet].RigInfCount do(
-                            RigBoneNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-                            RigBuffStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
-                            RigBuffSize = struct.unpack('<L', f.read(4))[0]; f.seek(0x04) #seek_cur
+                            RigBoneNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+                            RigBuffStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+                            RigBuffSize = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                             RigRet = f.tell()
-                            f.seek(RigBoneNameOffset) #seek_set
+                            f.seek(RigBoneNameOffset, 0)
                             RigBoneName = f.readline()
-                            f.seek(RigBuffStart) #seek_set
+                            f.seek(RigBuffStart, 0)
                             RigBoneID = 0
                             for b = 1 to BoneArray.count do(
                                     if RigBoneName == BoneArray[b].name do(
@@ -735,7 +736,7 @@ def importMeshes(MSHName):
                                     append Weight_array[RigVertID].boneids RigBoneID
                                     append Weight_array[RigVertID].weights RigValue
                             )
-                            f.seek(RigRet) #seek_set
+                            f.seek(RigRet, 0)
                         ) 
                     ) else (
                         print (PolyGrp_array[p].VisGrpName + " has no influences! Treating as a root singlebind instead.")
