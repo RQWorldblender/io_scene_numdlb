@@ -64,7 +64,7 @@ def decompressHalfFloat(bytes):
         e = e + (127 -15)
         f = f << 13
         return reinterpretCastIntToFloat(int((s << 31) | (e << 23) | f))
-
+"""
 class MODLStruct:
     # struct MODLStruct (MSHGrpName, MSHMatName)
     def __init__(self):
@@ -77,7 +77,7 @@ class MODLStruct:
 
     def __repr__(self):
         return "Mesh group name: " + str(self.meshGroupName) + "\t| Mesh material name: " + str(self.meshMaterialName) + "\n"
-
+"""
 class MatStruct:
     # struct MatStruct (MatName, MatColName, MatCol2Name, MatBakeName, MatNorName, MatEmiName, atEmi2Name, MatPrmName, MatEnvName)
     def __init__(self):
@@ -97,12 +97,12 @@ class MatStruct:
 class weight_data:
     # struct weight_data (boneids, weights)
     def __init__(self):
-        self.boneID = []
-        self.weight = []
+        self.boneIDs = []
+        self.weights = []
 
-    def __init__(self, boneID, weight):
-        self.boneID = boneID
-        self.weight = weight
+    def __init__(self, boneIDs, weights):
+        self.boneIDs = boneIDs
+        self.weights = weights
 
     def __repr__(self):
         return "Bone IDs: " + str(self.boneIDs) + "\t| Weights: " + str(self.weights) + "\n"
@@ -147,7 +147,8 @@ MODLName = ""
 SKTName = ""
 MATName = ""
 MSHName = ""
-MODLGrp_array = []
+skelName = ""
+MODLGrp_array = {}
 Materials_array = []
 BoneCount = 0
 BoneArray = []
@@ -158,11 +159,11 @@ BoneName_array = []
 PolyGrp_array = []
 WeightGrp_array = []
 
-def getModelInfo(self, context, MDLName, print_debug_info=False):
-    if os.path.isfile(MDLName):
-        with open(MDLName, 'rb') as md:
+def getModelInfo(context, filepath, texture_ext=".png", use_vertex_colors=True, use_uv_maps=True, remove_doubles=False, connect_bones=False, print_debug_info=False):
+    if os.path.isfile(filepath):
+        with open(filepath, 'rb') as md:
             global p
-            p = os.path.dirname(MDLName)
+            p = os.path.dirname(filepath)
             #struct MODLStruct (MSHGrpName, MSHMatName)
 
             md.seek(0x10, 0)
@@ -194,6 +195,7 @@ def getModelInfo(self, context, MDLName, print_debug_info=False):
                 MSHName = os.path.join(p, str(md.read(12))[2:14]); md.seek(0x04, 1)
                 md.seek(MSHDatOff, 0)
                 global MODLGrp_array
+                nameCounter = 0
                 for g in range(MSHDatCount):
                     MSHGrpNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
                     MSHUnkNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
@@ -212,13 +214,28 @@ def getModelInfo(self, context, MDLName, print_debug_info=False):
                     del materialNameBuffer[-1]
                     meshMaterialName = ''.join(materialNameBuffer)
                     # append MODLGrp_array (MODLStruct MSHGrpName:MSHGrpName MSHMatName:MSHMatName)
-                    MODLGrp_array.append(MODLStruct(meshGroupName, meshMaterialName))
+                    if meshGroupName in MODLGrp_array:
+                        nameCounter += 1
+                        MODLGrp_array[meshGroupName + str(nameCounter * .001)[1:]] = meshMaterialName
+                    else:
+                        MODLGrp_array[meshGroupName] = meshMaterialName
+                        nameCounter = 0
                     md.seek(MSHRet, 0)
                 if print_debug_info:
                     print(MODLGrp_array)
+            else:
+                raise RuntimeError("%s is not a valid NUMDLB file." % filepath)
+        
+        
+        if os.path.isfile(MATName):
+            importMaterials(context, MATName)
+        if os.path.isfile(SKTName):
+            importSkeleton(context, SKTName)
+        if os.path.isfile(MSHName):
+            importMeshes(context, MSHName)
         
 # Imports the materials
-def importMaterials(self, context, MATName, texture_ext=".png", print_debug_info=False):
+def importMaterials(context, MATName, texture_ext=".png"):
     with open(MATName, 'rb') as mt:
         # struct MatStruct (MatName, MatColName, MatCol2Name, MatBakeName, MatNorName, MatEmiName, atEmi2Name, MatPrmName, MatEnvName)
 
@@ -298,22 +315,33 @@ def importMaterials(self, context, MATName, texture_ext=".png", print_debug_info
                 mt.seek(MATRet, 0)
 
             for m in range(MATCount):
+                # Create material if it doesn't already exist
                 if (bpy.data.materials.find(Materials_array[m].materialName) == -1):
                     mat = bpy.data.materials.new(Materials_array[m].materialName)
-                if (bpy.data.textures.find(Materials_array[m].color1Name) == -1):
-                    tex = bpy.data.textures.new(Materials_array[m].color1Name, IMAGE)
-                img = bpy.data.images.load(os.path.join(os.path.relpath(p), Materials_array[m].color1Name, texture_ext), check_existing=True)
-                tex.image = im
-                if (mat.texture_slots.find(tex.name) == -1):
-                    slot = mat.texture_slots.add()
-                    slot.texture = tex
-                    slot.texture_coords = 'UV'
+                # Create primary texture slot if it doesn't already exist
+                if (Materials_array[m].color1Name != "" and bpy.data.textures.find(Materials_array[m].color1Name) == -1):
+                    tex = bpy.data.textures.new(Materials_array[m].color1Name, type='IMAGE')
+                    img = bpy.data.images.load(os.path.join(os.path.relpath(p), Materials_array[m].color1Name + texture_ext), check_existing=True)
+                    tex.image = img
+                    if (mat.texture_slots.find(tex.name) == -1):
+                        slot = mat.texture_slots.add()
+                        slot.texture = tex
+                        slot.texture_coords = 'UV'
+                # Create secondary texture slot if it doesn't already exist    
+                if (Materials_array[m].color2Name != "" and bpy.data.textures.find(Materials_array[m].color2Name) == -1):
+                    altTex = bpy.data.textures.new(Materials_array[m].color2Name, type='IMAGE')
+                    altImg = bpy.data.images.load(os.path.join(os.path.relpath(p), Materials_array[m].color2Name + texture_ext), check_existing=True)
+                    altTex.image = altImg
+                    if (mat.texture_slots.find(altTex.name) == -1):
+                        altSlot = mat.texture_slots.add()
+                        altSlot.texture = altTex
+                        altSlot.texture_coords = 'UV'
             
         if print_debug_info:
             print(Materials_array)
 
 # Imports the skeleton
-def importSkeleton(self, context, SKTName, connect_bones=False, print_debug_info=False):
+def importSkeleton(context, SKTName, connect_bones=False, print_debug_info=False):
     with open(SKTName, 'rb') as b:
         b.seek(0x10, 0)
         BoneCheck = struct.unpack('<L', b.read(4))[0]
@@ -353,6 +381,7 @@ def importSkeleton(self, context, SKTName, connect_bones=False, print_debug_info
 
             b.seek(BoneMatrOffset, 0)
             # Before adding the bones, create a new armature and select it
+            global skelName
             skelName = MODLName + "-armature"
             skel = bpy.data.objects.new(skelName, bpy.data.armatures.new(skelName))
             skel.data.draw_type = 'STICK'
@@ -370,16 +399,16 @@ def importSkeleton(self, context, SKTName, connect_bones=False, print_debug_info
                 m31 = struct.unpack('<f', b.read(4))[0]; m32 = struct.unpack('<f', b.read(4))[0]; m33 = struct.unpack('<f', b.read(4))[0]; m34 = struct.unpack('<f', b.read(4))[0]
                 m41 = struct.unpack('<f', b.read(4))[0]; m42 = struct.unpack('<f', b.read(4))[0]; m43 = struct.unpack('<f', b.read(4))[0]; m44 = struct.unpack('<f', b.read(4))[0]
                 #tfm = matrix3 [m11,m12,m13] [m21,m22,m23] [m31,m32,m33] [m41,m42,m43] 
-                tfm = [[m11,m12,m13,m14], [m21,m22,m23,m24], [m31,m32,m33,m34], [m41,m42,m43,m44]]
+                tfm = [m11, m21, m31, m41, m12, m22, m32, m42, m13, m23, m33, m43, m14, m24, m34, m44]
                 if print_debug_info:
                     print("Matrix for " + BoneName_array[c] + ":\n" + str(tfm))
                 newBone = skel.data.edit_bones.new(BoneName_array[c])
                 # Advance to each column first, then row
-                newBone.matrix = (m11, m21, m31, m41, m12, m22, m32, m42, m13, m23, m33, m43, m14, m24, m34, m44)
+                newBone.matrix = tfm
                 if connect_bones:
                     newBone.use_connect = True
                 else:
-                    # Bones must a be non-zero length, or Blender will eventually remove it
+                    # Bones must a be non-zero length, or Blender will eventually remove them
                     newBone.head = (0.0, 0.0, 0.01)
                 newBone.use_inherit_rotation = True
                 newBone.use_inherit_scale = True
@@ -399,7 +428,7 @@ def importSkeleton(self, context, SKTName, connect_bones=False, print_debug_info
             #     $.parent = BoneArray[BoneParent_array[BoneFixArray[x]]]
 
 # Imports the meshes
-def importMeshes(self, context, MSHName, use_vertex_colors=True, print_debug_info=False):
+def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, remove_doubles=False, print_debug_info=False):
     with open(MSHName, 'rb') as f:
         time_start = time.time()
         # struct weight_data (boneids, weights)
@@ -424,6 +453,7 @@ def importMeshes(self, context, MSHName, use_vertex_colors=True, print_debug_inf
 
             f.seek(PolyGrpInfOffset, 0)
             global PolyGrp_array
+            nameCounter = 0
             for g in range(PolyGrpCount):
                 ge = PolyGrpStruct()
                 VisGrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
@@ -457,7 +487,12 @@ def importMeshes(self, context, MSHName, use_vertex_colors=True, print_debug_inf
                 while('\\' not in visGroupBuffer):
                     visGroupBuffer.append(str(f.read(1))[2:3])
                 del visGroupBuffer[-1]
-                ge.visGroupName = ''.join(visGroupBuffer)
+                if (len(PolyGrp_array) > 0 and PolyGrp_array[g - 1].visGroupName == ''.join(visGroupBuffer)):
+                    nameCounter += 1
+                    ge.visGroupName = ''.join(visGroupBuffer) + str(nameCounter * .001)[1:]
+                else:
+                    ge.visGroupName = ''.join(visGroupBuffer)
+                    nameCounter = 0
                 f.seek(SingleBindNameOffset, 0)
                 oneBindNameBuffer = []
                 while('\\' not in oneBindNameBuffer):
@@ -480,6 +515,7 @@ def importMeshes(self, context, MSHName, use_vertex_colors=True, print_debug_inf
 
             f.seek(WeightBuffOffset, 0)
             global WeightGrp_array
+            nameCounter = 0
             for b in range(WeightCount):
                 be = WeightGrpStruct()
                 GrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
@@ -497,13 +533,18 @@ def importMeshes(self, context, MSHName, use_vertex_colors=True, print_debug_inf
                 while('\\' not in groupNameBuffer):
                     groupNameBuffer.append(str(f.read(1))[2:3])
                 del groupNameBuffer[-1]
-                be.groupName = ''.join(groupNameBuffer)
+                if (len(WeightGrp_array) > 0 and WeightGrp_array[b - 1].groupName == ''.join(groupNameBuffer)):
+                    nameCounter += 1
+                    be.groupName = ''.join(visGroupBuffer) + str(nameCounter * .001)[1:]
+                else:
+                    be.groupName = ''.join(visGroupBuffer)
+                    nameCounter = 0
                 WeightGrp_array.append(be)
                 f.seek(WeightRet, 0)
 
             if print_debug_info:
                 print(WeightGrp_array)
-
+            # Repeats for every mesh group
             for p in range(PolyGrpCount):
                 Vert_array = []
                 Normal_array = []
@@ -551,7 +592,7 @@ def importMeshes(self, context, MSHName, use_vertex_colors=True, print_debug_inf
                     else:
                         raise RuntimeError("Unknown format!")
                     f.seek(BuffParamRet, 0)
-
+                # Read vertice data
                 f.seek(VertOffStart + PolyGrp_array[p].verticeStart, 0)
 
                 if print_debug_info:
@@ -582,67 +623,69 @@ def importMeshes(self, context, MSHName, use_vertex_colors=True, print_debug_inf
 
                 if print_debug_info:
                     print("Vert end: " + str(f.tell()))
+                # Read UV map data if option is enabled
+                if use_uv_maps:
+                    f.seek(UVOffStart + PolyGrp_array[p].UVStart, 0)
 
-                f.seek(UVOffStart + PolyGrp_array[p].UVStart, 0)
-
-                if print_debug_info:
-                    print("UV start: " + str(f.tell()))
-                for v in range(PolyGrp_array[p].verticeCount):
-                    if (UVCount == 0):
-                        UV_array.append([0,0,0])
-                    elif (UVCount == 1):
-                        tu = (decompressHalfFloat(f.read(2)) * 2)
-                        tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        UV_array.append([tu,tv,0])
-                    elif (UVCount == 2):
-                        tu = (decompressHalfFloat(f.read(2)) * 2)
-                        tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu2 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv2 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        UV_array.append([tu,tv,0])
-                        UV2_array.append([tu2,tv2,0])
-                    elif (UVCount == 3):
-                        tu = (decompressHalfFloat(f.read(2)) * 2)
-                        tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu2 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv2 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu3 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv3 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        UV_array.append([tu,tv,0])
-                        UV2_array.append([tu2,tv2,0])
-                        UV3_array.append([tu3,tv3,0])
-                    elif (UVCount == 4):
-                        tu = (decompressHalfFloat(f.read(2)) * 2)
-                        tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu2 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv2 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu3 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv3 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu4 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv4 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        UV_array.append([tu,tv,0])
-                        UV2_array.append([tu2,tv2,0])
-                        UV3_array.append([tu3,tv3,0])
-                        UV4_array.append([tu4,tv4,0])
-                    elif (UVCount == 5):
-                        tu = (decompressHalfFloat(f.read(2)) * 2)
-                        tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu2 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv2 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu3 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv3 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu4 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv4 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu5 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv5 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        UV_array.append([tu,tv,0])
-                        UV2_array.append([tu2,tv2,0])
-                        UV3_array.append([tu3,tv3,0])
-                        UV4_array.append([tu4,tv4,0])
-                        UV5_array.append([tu5,tv5,0])
-                    else:
-                        raise RuntimeError("More than 5 UV sets, crashing gracefully.")
-
+                    if print_debug_info:
+                        print("UV start: " + str(f.tell()))
+                    for v in range(PolyGrp_array[p].verticeCount):
+                        if (UVCount == 0):
+                            UV_array.append([0,0,0])
+                        elif (UVCount == 1):
+                            tu = (decompressHalfFloat(f.read(2)) * 2)
+                            tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            UV_array.append([tu,tv,0])
+                        elif (UVCount == 2):
+                            tu = (decompressHalfFloat(f.read(2)) * 2)
+                            tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            tu2 = (decompressHalfFloat(f.read(2)) * 2)
+                            tv2 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            UV_array.append([tu,tv,0])
+                            UV2_array.append([tu2,tv2,0])
+                        elif (UVCount == 3):
+                            tu = (decompressHalfFloat(f.read(2)) * 2)
+                            tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            tu2 = (decompressHalfFloat(f.read(2)) * 2)
+                            tv2 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            tu3 = (decompressHalfFloat(f.read(2)) * 2)
+                            tv3 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            UV_array.append([tu,tv,0])
+                            UV2_array.append([tu2,tv2,0])
+                            UV3_array.append([tu3,tv3,0])
+                        elif (UVCount == 4):
+                            tu = (decompressHalfFloat(f.read(2)) * 2)
+                            tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            tu2 = (decompressHalfFloat(f.read(2)) * 2)
+                            tv2 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            tu3 = (decompressHalfFloat(f.read(2)) * 2)
+                            tv3 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            tu4 = (decompressHalfFloat(f.read(2)) * 2)
+                            tv4 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            UV_array.append([tu,tv,0])
+                            UV2_array.append([tu2,tv2,0])
+                            UV3_array.append([tu3,tv3,0])
+                            UV4_array.append([tu4,tv4,0])
+                        elif (UVCount == 5):
+                            tu = (decompressHalfFloat(f.read(2)) * 2)
+                            tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            tu2 = (decompressHalfFloat(f.read(2)) * 2)
+                            tv2 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            tu3 = (decompressHalfFloat(f.read(2)) * 2)
+                            tv3 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            tu4 = (decompressHalfFloat(f.read(2)) * 2)
+                            tv4 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            tu5 = (decompressHalfFloat(f.read(2)) * 2)
+                            tv5 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
+                            UV_array.append([tu,tv,0])
+                            UV2_array.append([tu2,tv2,0])
+                            UV3_array.append([tu3,tv3,0])
+                            UV4_array.append([tu4,tv4,0])
+                            UV5_array.append([tu5,tv5,0])
+                        else:
+                            print("Importing more than 5 UV sets is not supported, skipping this set.")
+                # Read vertex color data if option is enabled
+                if use_vertex_colors:
                     if (ColorCount == 0):
                         Color_array.append([128,128,128])
                         Alpha_array.append(1)
@@ -727,11 +770,11 @@ def importMeshes(self, context, MSHName, use_vertex_colors=True, print_debug_inf
                         Color4_array.append([colorr4,colorg4,colorb4]); Alpha4_array.append(colora4)
                         Color5_array.append([colorr5,colorg5,colorb5]); Alpha5_array.append(colora5)
                     else:
-                        raise RuntimeError("More than 5 color sets, crashing gracefully.")
+                        print("Importing more than 5 vertex color sets is not supported, skipping this set.")
 
                 if print_debug_info:
                     print("UV end: " + str(f.tell()))
-
+                # Read face data
                 f.seek(FaceBuffOffset + PolyGrp_array[p].facepointStart, 0)
                 if print_debug_info:
                     print("Face start: " + str(f.tell()))
@@ -770,7 +813,7 @@ def importMeshes(self, context, MSHName, use_vertex_colors=True, print_debug_inf
                                 RigSet = b
                                 # WeightGrp_array[b].groupName = "" # Dumb fix due to shared group names but split entries, prevents crashing.
                                 break
-
+                    # Read vertice/weight group data
                     f.seek(WeightGrp_array[RigSet].rigInfOffset, 0)
                     if print_debug_info:
                         print("Rig info start: " + str(f.tell()))
@@ -811,133 +854,140 @@ def importMeshes(self, context, MSHName, use_vertex_colors=True, print_debug_inf
                         for b in range(len(Vert_array)):
                             Weight_array.append(weight_data(1, 1.0))
 
-                MatID = 1
-                for b in range(len(Materials_array)):
-                    if (MODLGrp_array[p].meshMaterialName == Materials_array[b].materialName):
-                        MatID = b
-                        break
                 # Finally add the meshes into Blender
-                msh = mesh vertices:Vert_array faces:Face_array
-                msh.numTVerts = len(Vert_array)
+                mesh = bpy.data.objects.new(PolyGrp_array[p].visGroupName, bpy.data.meshes.new(PolyGrp_array[p].visGroupName))
+                mesh.data.material.append(MODLGrp_array[PolyGrp_array[p].visGroupName])
+                mesh.data.use_auto_smooth = True
+                mesh.parent = bpy.data.objects[skelName]
+                
+                for bone in bpy.data.armatures[skelName].bones.values():
+                    mesh.vertex_groups.new(bone.name)
+                modifier = mesh.modifiers.new(skelName, type="ARMATURE")
+                modifier.object = skelName
+
+                bm = bmesh.new()
+                bm.from_mesh(mesh.data)
+                
                 if (PolyGrp_array[p].singleBindName != ""):
                         SingleBindID = 1
                         for b in range(len(BoneName_array)):
-                                if (PolyGrp_array[p].singleBindName == BoneName_array[b]):
-                                    SingleBindID = b
-                                    break
-
-                        msh.transform = BoneTrsArray[SingleBindID]
-
-                if use_vertex_colors:
-                    setNumCPVVerts msh msh.numTVerts
-                    setCVertMode msh true
-                    setShadeCVerts msh true
-
-                defaultVCFaces msh
-                buildTVFaces msh
-                msh.name = PolyGrp_array[p].visGroupName
-                msh.material = multimat
-                for j in range(len(UV_array.count)):
-                    pass# do setTVert msh j UV_array[j]
-                if (UV2_array.count > 0):
-                        meshop.setNumMaps msh 3 keep:true
-                        for i in range(len(UV2_array)):
-                                meshop.setMapVert msh 2 i UV2_array[i]
-
-                if (UV3_array.count > 0):
-                        meshop.setNumMaps msh 4 keep:true
-                        for i in range(len(UV3_array)):
-                                meshop.setMapVert msh 3 i UV3_array[i]
-
-                if (UV4_array.count > 0):
-                        meshop.setNumMaps msh 5 keep:true
-                        for i in range(len(UV4_array)):
-                                meshop.setMapVert msh 4 i UV4_array[i]
-
-                if (UV5_array.count > 0):
-                        meshop.setNumMaps msh 6 keep:true
-                        for i in range(len(UV5_array)):
-                                meshop.setMapVert msh 5 i UV5_array[i]
-
-                for j in range(len(Face_array)):
-                        setTVFace msh j Face_array[j]
-                        setFaceMatID msh j MatID
-
-                if use_vertex_colors:
-                    for j in range(len(Color_array.count)):
-                        setvertcolor msh j Color_array[j]
-                    for j in range(len(Alpha_array)):
-                        meshop.setVertAlpha msh -2 j Alpha_array[j])
-
-                for j in range(len(msh.numfaces)):
-                    setFaceSmoothGroup msh j 1
-                max modify mode
-                select msh
-
-                addmodifier msh (Edit_Normals ()) ui:off
-                msh.Edit_Normals.MakeExplicit selection:#{1..Normal_array.count}
-                EN_convertVS = msh.Edit_Normals.ConvertVertexSelection
-                EN_setNormal = msh.Edit_Normals.SetNormal
-                normID = #{}
-
-                for v in range(len(Normal_array)):
-                        free normID
-                        EN_convertVS #{v} &normID
-                        for id in normID do EN_setNormal id Normal_array[v]
-                )
-
+                            if (PolyGrp_array[p].singleBindName == BoneName_array[b]):
+                                SingleBindID = b
+                                break
+                        mesh.data.transform(BoneTrsArray[SingleBindID], shape_keys=False)
+                
                 if (BoneCount > 0):
-                    skinMod = skin ()
                     boneIDMap = []
-                    addModifier msh skinMod
-                    msh.Skin.weightAllVertices = false
+                    """
                     for i in range(len(BoneCount)):
-                    (
-                             maxbone = getnodebyname BoneArray[i].name
-                             if i != BoneCount then
-                                    skinOps.addBone skinMod maxbone 0
-                             else
-                                    skinOps.addBone skinMod maxbone 1
-                    )
-
-                    local numSkinBones = skinOps.GetNumberBones skinMod
-                    for i in range(len(numSkinBones do
-                    (
-                            local boneName = skinOps.GetBoneName skinMod i 0
-                            for j in range(len(BoneCount)):
-                            (
-                                    if boneName == BoneArray[j].Name then
-                                    (
-                                            boneIDMap[j] = i
-                                            j = BoneCount + 1
-                                    )
-                            )
-                    ) # This fixes bone ordering in 3DS Max 2012. Thanks to sunnydavis for the fix!
-
-                    modPanel.setCurrentObject skinMod
-
+                        # maxbone = getnodebyname BoneArray[i].name
+                        if (i != BoneCount):
+                            pass# skinOps.addBone skinMod maxbone 0
+                        else:
+                            pass# skinOps.addBone skinMod maxbone 1
+                    """
+                    # local numSkinBones = skinOps.GetNumberBones skinMod
+                    for bone in bpy.data.armatures[skelName].bones.values():
+                    # for i in range(len(numSkinBones)):
+                        # local boneName = skinOps.GetBoneName skinMod i 0
+                        for j in range(len(BoneCount)):
+                            if (bone.name == BoneArray[j].name):
+                                boneIDMap[j] = i
+                                j = BoneCount + 1
+                    """
                     # These fix broken rigging for 3DS Max 2015 and above.
                     for i in range(len(Vert_array)):
-                            skinOps.SetVertexWeights skinMod i 1 1
-                            skinOps.unnormalizeVertex skinMod i true 
-                            skinOps.SetVertexWeights skinMod i 1 0
-                            skinOps.unnormalizeVertex skinMod i false
-                    )
-                    skinOps.RemoveZeroWeights skinMod
+                        skinOps.SetVertexWeights skinMod i 1 1
+                        skinOps.unnormalizeVertex skinMod i true 
+                        skinOps.SetVertexWeights skinMod i 1 0
+                        skinOps.unnormalizeVertex skinMod i false
+                    )"""
+                
+                weight_layer = bm.verts.layers.deform.new()
+                for vert in range(len(Vert_array)):
+                    bmv = bm.verts.new(Vert_array[vert])
+                    bmv.normal = Normal_array[vert]
 
-                    for i in range(len(Weight_array)):
-                            w = Weight_array[i]
-                            bi = [] # bone index array
-                            wv = [] # weight value array
+                    for w in Weight_array:
+                        bi = [] # bone index array
+                        wv = [] # weight value array
 
-                            for j in range(len(w.boneids.count)):
-                            
-                                    boneid = w.boneids[j]
-                                    weight = w.weights[j]
-                                    append bi boneIDMap[boneid]
-                                    append wv weight
-                            
-                            skinOps.ReplaceVertexWeights skinMod i bi wv
+                        for j in range(len(w.boneIDs)):
+                            boneid = w.boneIDs[j]
+                            weight = w.weights[j]
+                            bi.append(boneIDMap[boneid])
+                            wv.append(weight)
+
+                        bmv[weight_layer][bi] = wv
+                # Required after adding / removing vertices and before accessing them
+                # by index.
+                bm.verts.ensure_lookup_table()
+                # Required to actually retrieve the indices later on (or they stay -1).
+                bm.verts.index_update()
+                
+                if use_vertex_colors:
+                    color_layer = bm.loops.layers.color.new()
+                if use_uv_maps:
+                    if (len(UV_array) > 0):
+                        uv_layer = bm.loops.layers.uv.new()
+                        tex_layer = bm.faces.layers.tex.new()
+                    if (len(UV2_array) > 0):
+                        uv_layer_2 = bm.loops.layers.uv.new()
+                        tex_layer_2 = bm.faces.layers.tex.new()
+                    if (len(UV3_array) > 0):
+                        uv_layer_3 = bm.loops.layers.uv.new()
+                        tex_layer_3 = bm.faces.layers.tex.new()
+                    if (len(UV4_array) > 0):
+                        uv_layer_4 = bm.loops.layers.uv.new()
+                        tex_layer_4 = bm.faces.layers.tex.new()
+                    if (len(UV5_array) > 0):
+                        uv_layer_5 = bm.loops.layers.uv.new()
+                        tex_layer_5 = bm.faces.layers.tex.new()
+
+                for face in range(len(Face_array)):
+                    bmf = bm.faces.new(Face_array[face])
+
+                    if use_uv_maps:
+                            if (len(UV_array) > 0):
+                                face[tex_layer].image = bpy.data.images[Materials_array[Materials_array.index(MODLGrp_array[PolyGrp_array[p].visGroupName])].color1Name + texture_ext].name
+                            if (len(UV2_array) > 0):
+                                face[tex_layer_2].image = bpy.data.images[Materials_array[Materials_array.index(MODLGrp_array[PolyGrp_array[p].visGroupName])].color2Name + texture_ext].name
+                            """ Images can currently be linked only with the first 2 UV maps
+                            if (len(UV3_array) > 0):
+                                face[tex_layer_3].image = 
+                            if (len(UV4_array) > 0):
+                                face[tex_layer_4].image = 
+                            if (len(UV5_array) > 0):
+                                face[tex_layer_5].image = """
+
+                    for loop in face.loops:
+                        if use_vertex_colors:
+                            for j in range(len(Color_array)):
+                                loop[color_layer][0] = Color_array[loop.vert.index][0]
+                                loop[color_layer][1] = Color_array[loop.vert.index][1]
+                                loop[color_layer][2] = Color_array[loop.vert.index][2]
+                            for j in range(len(Alpha_array)):
+                                loop[color_layer][3] = Alpha_array[loop.vert.index]
+                        if use_uv_maps:
+                            if (len(UV_array) > 0):
+                                loop[uv_layer].uv = UV_array[loop.vert.index]
+                            if (len(UV2_array) > 0):
+                                loop[uv_layer_2].uv = UV2_array[loop.vert.index]
+                            if (len(UV3_array) > 0):
+                                loop[uv_layer_3].uv = UV3_array[loop.vert.index]
+                            if (len(UV4_array) > 0):
+                                loop[uv_layer_4].uv = UV4_array[loop.vert.index]
+                            if (len(UV5_array) > 0):
+                                loop[uv_layer_5].uv = UV5_array[loop.vert.index]
+
+                for poly in mesh.data.polygons:
+                    poly.use_smooth = True
+                                 
+                if remove_doubles:
+                    bmesh.ops.remove_doubles(bm, verts = bm.verts)
+                bm.to_mesh(mesh)
+                bm.free()
+                bpy.context.scene.objects.link(mesh)
 
         print("Done! Mesh import completed in " + str((time.time()-time_start)*0.001) + " seconds.")
 
@@ -957,10 +1007,28 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
             default=True,
             )
     
+    use_uv_maps = bpy.props.BoolProperty(
+            name="UV Maps",
+            description="Import UV map information to meshes",
+            default=True,
+            )
+
+    remove_doubles = bpy.props.BoolProperty(
+            name="Remove Doubles",
+            description="Remove duplicate vertices",
+            default=False,
+            )
+    
     connect_bones = bpy.props.BoolProperty(
             name="Connected Bones",
             description="Attach the head of every bone to their parent tail, except for the parent itself",
             default=False,
+            )
+
+    auto_rotate = bpy.props.BoolProperty(
+            name="Auto-Rotate Armature",
+            description="Rotate the armature so that everything points up z-axis, instead of up y-axis",
+            default=True,
             )
 
     print_debug_info = bpy.props.BoolProperty(
@@ -976,15 +1044,15 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
             )
         
     def execute(self, context):
-        keywords = self.as_keywords(ignore=("filter_glob",))
+        keywords = self.as_keywords(ignore=("filter_glob", "auto_rotate"))
         getModelInfo(context, **keywords)
 
-        if os.path.isfile(MATName):
-            importMaterials(context, **keywords)
-        if os.path.isfile(SKTName):
-            importSkeleton(context, **keywords)
-        if os.path.isfile(MSHName):
-            importMeshes(context, **keywords)
+        # Rotate armature if option is enabled
+        if auto_rotate:
+            bpy.ops.object.select_all(action='TOGGLE')
+            bpy.ops.object.select_pattern(pattern="*Armature*")
+            bpy.ops.transform.rotate(value=1.570796, axis=(1, 0, 0), constraint_axis=(True, False, False), constraint_orientation='GLOBAL', mirror=False, proportional='DISABLED', proportional_edit_falloff='SMOOTH', proportional_size=1)
+            bpy.ops.object.select_all(action='TOGGLE')
 
         context.scene.update()
         return {"FINISHED"}
