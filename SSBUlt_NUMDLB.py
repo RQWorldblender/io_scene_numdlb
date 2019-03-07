@@ -141,29 +141,44 @@ class WeightGrpStruct:
     def __repr__(self):
         return str(self.groupName) + "\t| Subgroup #: " + str(self.subGroupNum) + "\t| Weight info max: " + str(self.weightInfMax) + "\t| Weight flags" + str(self.weightFlag2) + ", " + str(self.weightFlag3) + ", " + str(self.weightFlag4) + "\t| Rig info offset: " + str(self.rigInfOffset) + "\t| Rig info count: " + str(self.rigInfCount) + "\n"
 
-# Global variables used by all of the main functions
-p = ""
-MODLName = ""
-SKTName = ""
-MATName = ""
-MSHName = ""
-skelName = ""
-MODLGrp_array = {}
-Materials_array = []
-BoneCount = 0
-BoneArray = []
-BoneFixArray = []
-BoneTrsArray = []
-BoneParent_array = []
-BoneName_array = []
-PolyGrp_array = []
-WeightGrp_array = []
+def findUVImageForMesh(matNameQuery, useUVMap2):
+    for mat in Materials_array:
+        if (mat.materialName == matNameQuery):
+            if useUVMap2:
+                return mat.color2Name
+            else:
+                return mat.color1Name
+    return
 
-def getModelInfo(context, filepath, texture_ext=".png", use_vertex_colors=True, use_uv_maps=True, remove_doubles=False, connect_bones=False, print_debug_info=False):
+def readVarLenString(file):
+    nameBuffer = []
+    while('\\' not in nameBuffer):
+        nameBuffer.append(str(file.read(1))[2:3])
+    del nameBuffer[-1]
+    return ''.join(nameBuffer)
+
+def getModelInfo(context, filepath, texture_ext=".png", up_axis='Y', use_vertex_colors=True, use_uv_maps=True, remove_doubles=False, connect_bones=False, auto_rotate=False):
+    # Semi-global variables used by this function's hiearchy ; cleared every time this function runs
+    global dirPath; dirPath = ""
+    global MODLName; MODLName = ""
+    global SKTName; SKTName = ""
+    global MATName; MATName = ""
+    global MSHName; MSHName = ""
+    global skelName; skelName = ""
+    global MODLGrp_array; MODLGrp_array = {}
+    global Materials_array; Materials_array = []
+    global BoneCount; BoneCount = 0
+    global BoneArray; BoneArray = []
+    global BoneFixArray; BoneFixArray = []
+    global BoneTrsArray; BoneTrsArray = []
+    global BoneParent_array; BoneParent_array = []
+    global BoneName_array; BoneName_array = []
+    global PolyGrp_array; PolyGrp_array = []
+    global WeightGrp_array; WeightGrp_array = []
+    
     if os.path.isfile(filepath):
         with open(filepath, 'rb') as md:
-            global p
-            p = os.path.dirname(filepath)
+            dirPath = os.path.dirname(filepath)
             #struct MODLStruct (MSHGrpName, MSHMatName)
 
             md.seek(0x10, 0)
@@ -179,22 +194,16 @@ def getModelInfo(context, filepath, texture_ext=".png", use_vertex_colors=True, 
                 MSHNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
                 MSHDatOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
                 MSHDatCount = struct.unpack('<L', md.read(4))[0]
-                # The next 4 names assume exactly "model" as the basename and the extension 6 characters long
                 md.seek(MODLNameOff, 0)
-                global MODLName
-                MODLName = str(md.read(6))[2:7]
+                MODLName = readVarLenString(md)
                 md.seek(SKTNameOff, 0)
-                global SKTName
-                SKTName = os.path.join(p, str(md.read(12))[2:14])
+                SKTName = os.path.join(dirPath, readVarLenString(md))
                 md.seek(MATNameOff, 0)
                 MATNameStrLen = struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
-                global MATName
-                MATName = os.path.join(p, str(md.read(12))[2:14])
+                MATName = os.path.join(dirPath, readVarLenString(md))
                 md.seek(MSHNameOff, 0)
-                global MSHName
-                MSHName = os.path.join(p, str(md.read(12))[2:14]); md.seek(0x04, 1)
+                MSHName = os.path.join(dirPath, readVarLenString(md)); md.seek(0x04, 1)
                 md.seek(MSHDatOff, 0)
-                global MODLGrp_array
                 nameCounter = 0
                 for g in range(MSHDatCount):
                     MSHGrpNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
@@ -202,17 +211,9 @@ def getModelInfo(context, filepath, texture_ext=".png", use_vertex_colors=True, 
                     MSHMatNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
                     MSHRet = md.tell()
                     md.seek(MSHGrpNameOff, 0)
-                    groupNameBuffer = []
-                    while('\\' not in groupNameBuffer):
-                        groupNameBuffer.append(str(md.read(1))[2:3])
-                    del groupNameBuffer[-1]
-                    meshGroupName = ''.join(groupNameBuffer)
+                    meshGroupName = readVarLenString(md)
                     md.seek(MSHMatNameOff, 0)
-                    materialNameBuffer = []
-                    while('\\' not in materialNameBuffer):
-                        materialNameBuffer.append(str(md.read(1))[2:3])
-                    del materialNameBuffer[-1]
-                    meshMaterialName = ''.join(materialNameBuffer)
+                    meshMaterialName = readVarLenString(md)
                     # append MODLGrp_array (MODLStruct MSHGrpName:MSHGrpName MSHMatName:MSHMatName)
                     if meshGroupName in MODLGrp_array:
                         nameCounter += 1
@@ -221,18 +222,23 @@ def getModelInfo(context, filepath, texture_ext=".png", use_vertex_colors=True, 
                         MODLGrp_array[meshGroupName] = meshMaterialName
                         nameCounter = 0
                     md.seek(MSHRet, 0)
-                if print_debug_info:
-                    print(MODLGrp_array)
+                print(MODLGrp_array)
             else:
                 raise RuntimeError("%s is not a valid NUMDLB file." % filepath)
         
-        
         if os.path.isfile(MATName):
-            importMaterials(context, MATName)
-        if os.path.isfile(SKTName):
-            importSkeleton(context, SKTName)
+            importMaterials(context, MATName, texture_ext)
+#        if os.path.isfile(SKTName):
+#            importSkeleton(context, SKTName, connect_bones)
         if os.path.isfile(MSHName):
-            importMeshes(context, MSHName)
+            importMeshes(context, MSHName, texture_ext, up_axis, use_vertex_colors, use_uv_maps, remove_doubles)
+        
+        # Rotate armature if option is enabled
+        if auto_rotate:
+            bpy.ops.object.select_all(action='TOGGLE')
+            bpy.ops.object.select_pattern(pattern="*Armature*")
+            bpy.ops.transform.rotate(value=math.radians(90), axis=(1, 0, 0), constraint_axis=(True, False, False), constraint_orientation='GLOBAL', mirror=False, proportional='DISABLED', proportional_edit_falloff='SMOOTH', proportional_size=1)
+            bpy.ops.object.select_all(action='TOGGLE')
         
 # Imports the materials
 def importMaterials(context, MATName, texture_ext=".png"):
@@ -247,7 +253,6 @@ def importMaterials(context, MATName, texture_ext=".png"):
             MATHeadOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
             MATCount = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
             mt.seek(MATHeadOff, 0)
-            global Materials_array
             for m in range(MATCount):
                 pe = MatStruct()
                 MATNameOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
@@ -270,11 +275,7 @@ def importMaterials(context, MATName, texture_ext=".png"):
                     MatParamRet = mt.tell()
                     if (MatParamType == 0x0B):
                         mt.seek(MatParamOff + 0x08, 0)
-                        textureNameBuffer = []
-                        while('\\' not in textureNameBuffer):
-                            textureNameBuffer.append(str(mt.read(1))[2:3])
-                        del textureNameBuffer[-1]
-                        TexName = ''.join(textureNameBuffer)
+                        TexName = str.lower(readVarLenString(mt))
                         print("(" + hex(MatParamID) + ") for " + TexName)
                         if (MatParamID == 0x5C):
                             pe.color1Name = TexName
@@ -305,8 +306,7 @@ def importMaterials(context, MATName, texture_ext=".png"):
                         elif (MatParamID == 0x133):
                             print("noise_for_warp")
                         else:
-                            if print_debug_info:
-                                print("Unknown type (" + hex(MatParamID) + ") for " + TexName)
+                            print("Unknown type (" + hex(MatParamID) + ") for " + TexName)
 
                         mt.seek(MatParamRet, 0)
 
@@ -315,33 +315,42 @@ def importMaterials(context, MATName, texture_ext=".png"):
                 mt.seek(MATRet, 0)
 
             for m in range(MATCount):
-                # Create material if it doesn't already exist
-                if (bpy.data.materials.find(Materials_array[m].materialName) == -1):
+                # Check and reuse existing same-name material, or create it if it doesn't already exist
+                if (bpy.data.materials.find(Materials_array[m].materialName) > 0):
+                    mat = bpy.data.materials[Materials_array[m].materialName]
+                else:
                     mat = bpy.data.materials.new(Materials_array[m].materialName)
-                # Create primary texture slot if it doesn't already exist
-                if (Materials_array[m].color1Name != "" and bpy.data.textures.find(Materials_array[m].color1Name) == -1):
-                    tex = bpy.data.textures.new(Materials_array[m].color1Name, type='IMAGE')
-                    img = bpy.data.images.load(os.path.join(os.path.relpath(p), Materials_array[m].color1Name + texture_ext), check_existing=True)
+                mat.specular_shader = 'PHONG'
+                # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
+                if (Materials_array[m].color1Name != ""):
+                    if (bpy.data.textures.find(Materials_array[m].color1Name) > 0):
+                        
+                        tex = bpy.data.textures[Materials_array[m].color1Name]
+                    else:
+                        tex = bpy.data.textures.new(Materials_array[m].color1Name, type='IMAGE')
+                    img = bpy.data.images.load(os.path.join(os.path.relpath(dirPath), Materials_array[m].color1Name + texture_ext), check_existing=True)
                     tex.image = img
                     if (mat.texture_slots.find(tex.name) == -1):
                         slot = mat.texture_slots.add()
                         slot.texture = tex
                         slot.texture_coords = 'UV'
-                # Create secondary texture slot if it doesn't already exist    
-                if (Materials_array[m].color2Name != "" and bpy.data.textures.find(Materials_array[m].color2Name) == -1):
-                    altTex = bpy.data.textures.new(Materials_array[m].color2Name, type='IMAGE')
-                    altImg = bpy.data.images.load(os.path.join(os.path.relpath(p), Materials_array[m].color2Name + texture_ext), check_existing=True)
+                # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
+                if (Materials_array[m].color2Name != ""):
+                    if (bpy.data.textures.find(Materials_array[m].color2Name) > 0):
+                        altTex = bpy.data.textures[Materials_array[m].color2Name]
+                    else:
+                        altTex = bpy.data.textures.new(Materials_array[m].color2Name, type='IMAGE')
+                    altImg = bpy.data.images.load(os.path.join(os.path.relpath(dirPath), Materials_array[m].color2Name + texture_ext), check_existing=True)
                     altTex.image = altImg
                     if (mat.texture_slots.find(altTex.name) == -1):
                         altSlot = mat.texture_slots.add()
                         altSlot.texture = altTex
                         altSlot.texture_coords = 'UV'
-            
-        if print_debug_info:
-            print(Materials_array)
+
+        print(Materials_array)
 
 # Imports the skeleton
-def importSkeleton(context, SKTName, connect_bones=False, print_debug_info=False):
+def importSkeleton(context, SKTName, connect_bones=False):
     with open(SKTName, 'rb') as b:
         b.seek(0x10, 0)
         BoneCheck = struct.unpack('<L', b.read(4))[0]
@@ -363,11 +372,7 @@ def importSkeleton(context, SKTName, connect_bones=False, print_debug_info=False
                 BoneNameOffset = b.tell() + struct.unpack('<L', b.read(4))[0]; b.seek(0x04, 1)
                 BoneRet = b.tell()
                 b.seek(BoneNameOffset, 0)
-                boneNameBuffer = []
-                while('\\' not in boneNameBuffer):
-                    boneNameBuffer.append(str(b.read(1))[2:3])
-                del boneNameBuffer[-1]
-                BoneName = ''.join(boneNameBuffer)
+                BoneName = readVarLenString(b)
                 b.seek(BoneRet, 0)
                 BoneID = struct.unpack('<H', b.read(2))[0]
                 BoneParent = struct.unpack('<H', b.read(2))[0] + 1
@@ -375,22 +380,21 @@ def importSkeleton(context, SKTName, connect_bones=False, print_debug_info=False
                 BoneParent_array.append(BoneParent)
                 BoneName_array.append(BoneName)
 
-            if print_debug_info:
-                print(BoneParent_array)
-                print(BoneName_array)
+            print("Total number of bones found: " + str(BoneCount))
+            print(BoneParent_array)
+            print(BoneName_array)
 
             b.seek(BoneMatrOffset, 0)
             # Before adding the bones, create a new armature and select it
-            global skelName
             skelName = MODLName + "-armature"
             skel = bpy.data.objects.new(skelName, bpy.data.armatures.new(skelName))
             skel.data.draw_type = 'STICK'
-            if print_debug_info:
-                skel.show_x_ray = True
-            bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
-            bpy.ops.object.select_all(action='DESELECT')
+            skel.show_x_ray = True
+            bpy.context.scene.objects.link(skel)
+            for i in bpy.context.selected_objects:
+                i.select = False
             skel.select = True
-            context.scene.objects.active = skel
+            bpy.context.scene.objects.active = skel
             bpy.ops.object.mode_set(mode='EDIT', toggle=False)
             for c in range(BoneCount):
                 # Matrix format is [X, Y, Z, W]
@@ -400,8 +404,7 @@ def importSkeleton(context, SKTName, connect_bones=False, print_debug_info=False
                 m41 = struct.unpack('<f', b.read(4))[0]; m42 = struct.unpack('<f', b.read(4))[0]; m43 = struct.unpack('<f', b.read(4))[0]; m44 = struct.unpack('<f', b.read(4))[0]
                 #tfm = matrix3 [m11,m12,m13] [m21,m22,m23] [m31,m32,m33] [m41,m42,m43] 
                 tfm = [m11, m21, m31, m41, m12, m22, m32, m42, m13, m23, m33, m43, m14, m24, m34, m44]
-                if print_debug_info:
-                    print("Matrix for " + BoneName_array[c] + ":\n" + str(tfm))
+                print("Matrix for " + BoneName_array[c] + ":\n" + str(tfm))
                 newBone = skel.data.edit_bones.new(BoneName_array[c])
                 # Advance to each column first, then row
                 newBone.matrix = tfm
@@ -409,7 +412,8 @@ def importSkeleton(context, SKTName, connect_bones=False, print_debug_info=False
                     newBone.use_connect = True
                 else:
                     # Bones must a be non-zero length, or Blender will eventually remove them
-                    newBone.head = (0.0, 0.0, 0.01)
+                    newBone.tail = (0.0, 0.01, 0)
+                newBone.use_deform = True
                 newBone.use_inherit_rotation = True
                 newBone.use_inherit_scale = True
                 newBone.use_inherit_location = True
@@ -417,7 +421,7 @@ def importSkeleton(context, SKTName, connect_bones=False, print_debug_info=False
                     newBone.parent = BoneArray[BoneParent[c]]
                 elif connect_bones:
                     # The parent bone, named "Trans", must a be non-zero length, or Blender will eventually remove it
-                    newBone.head = (0.0, 0.0, -0.01)
+                    newBone.tail = (0.0, 0.01, 0)
                 # if (BoneParent[c] > c):
                 #     BoneFixArray.append(c) # This thing again?
                 BoneArray.append(newBone)
@@ -428,7 +432,7 @@ def importSkeleton(context, SKTName, connect_bones=False, print_debug_info=False
             #     $.parent = BoneArray[BoneParent_array[BoneFixArray[x]]]
 
 # Imports the meshes
-def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, remove_doubles=False, print_debug_info=False):
+def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_colors=True, use_uv_maps=True, remove_doubles=False):
     with open(MSHName, 'rb') as f:
         time_start = time.time()
         # struct weight_data (boneids, weights)
@@ -452,7 +456,6 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
             WeightCount = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
 
             f.seek(PolyGrpInfOffset, 0)
-            global PolyGrp_array
             nameCounter = 0
             for g in range(PolyGrpCount):
                 ge = PolyGrpStruct()
@@ -460,7 +463,7 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
                 f.seek(0x04, 1)
                 Unk1 = struct.unpack('<L', f.read(4))[0]
                 SingleBindNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
-                ge.vertiveCount = struct.unpack('<L', f.read(4))[0]
+                ge.verticeCount = struct.unpack('<L', f.read(4))[0]
                 ge.facepointCount = struct.unpack('<L', f.read(4))[0]
                 Unk2 = struct.unpack('<L', f.read(4))[0] # Always 3?
                 ge.verticeStart = struct.unpack('<L', f.read(4))[0]
@@ -483,29 +486,20 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
                 Unk10 = struct.unpack('<L', f.read(4))[0] # Always 0
                 PolyGrpRet = f.tell()
                 f.seek(VisGrpNameOffset, 0)
-                visGroupBuffer = []
-                while('\\' not in visGroupBuffer):
-                    visGroupBuffer.append(str(f.read(1))[2:3])
-                del visGroupBuffer[-1]
-                if (len(PolyGrp_array) > 0 and PolyGrp_array[g - 1].visGroupName == ''.join(visGroupBuffer)):
+                visGroupBuffer = readVarLenString(f)
+                if (len(PolyGrp_array) > 0 and PolyGrp_array[g - 1].visGroupName == visGroupBuffer):
                     nameCounter += 1
-                    ge.visGroupName = ''.join(visGroupBuffer) + str(nameCounter * .001)[1:]
+                    ge.visGroupName = visGroupBuffer + str(nameCounter * .001)[1:]
                 else:
-                    ge.visGroupName = ''.join(visGroupBuffer)
+                    ge.visGroupName = visGroupBuffer
                     nameCounter = 0
                 f.seek(SingleBindNameOffset, 0)
-                oneBindNameBuffer = []
-                while('\\' not in oneBindNameBuffer):
-                    oneBindNameBuffer.append(str(f.read(1))[2:3])
-                del oneBindNameBuffer[-1]
-                ge.singleBindName = ''.join(oneBindNameBuffer)
+                ge.singleBindName = readVarLenString(f)
                 PolyGrp_array.append(ge)
-                if print_debug_info:
-                    print(ge.visGroupName + " unknowns: 1: " + str(Unk1) + "\t| Off1: " + str(UnkOff1) + "\t| 2: " + str(Unk2) + "\t| 3: " + str(Unk3) + "\t| 4: " + str(Unk4) + "\t| 5: " + str(Unk5) + "\t| 6: " + str(Unk6) + "\t| LongFace: " + str(ge.faceLongBit) + "\t| 8: " + str(Unk8) + "\t| Sort: " + str(SortPriority) + "\t| 9: " + str(Unk9) + "\t| 10: " + str(Unk10))
+                print(ge.visGroupName + " unknowns: 1: " + str(Unk1) + "\t| Off1: " + str(UnkOff1) + "\t| 2: " + str(Unk2) + "\t| 3: " + str(Unk3) + "\t| 4: " + str(Unk4) + "\t| 5: " + str(Unk5) + "\t| 6: " + str(Unk6) + "\t| LongFace: " + str(ge.faceLongBit) + "\t| 8: " + str(Unk8) + "\t| Sort: " + str(SortPriority) + "\t| 9: " + str(Unk9) + "\t| 10: " + str(Unk10))
                 f.seek(PolyGrpRet, 0)
 
-            if print_debug_info:
-                print(PolyGrp_array)
+            print(PolyGrp_array)
 
             f.seek(VertBuffOffset, 0)
             VertOffStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
@@ -514,7 +508,6 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
             UVBuffSize = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
 
             f.seek(WeightBuffOffset, 0)
-            global WeightGrp_array
             nameCounter = 0
             for b in range(WeightCount):
                 be = WeightGrpStruct()
@@ -529,21 +522,17 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
                 be.rigInfCount = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 WeightRet = f.tell()
                 f.seek(GrpNameOffset, 0)
-                groupNameBuffer = []
-                while('\\' not in groupNameBuffer):
-                    groupNameBuffer.append(str(f.read(1))[2:3])
-                del groupNameBuffer[-1]
-                if (len(WeightGrp_array) > 0 and WeightGrp_array[b - 1].groupName == ''.join(groupNameBuffer)):
+                groupNameBuffer = readVarLenString(f)
+                if (len(WeightGrp_array) > 0 and WeightGrp_array[b - 1].groupName == groupNameBuffer):
                     nameCounter += 1
-                    be.groupName = ''.join(visGroupBuffer) + str(nameCounter * .001)[1:]
+                    be.groupName = groupNameBuffer + str(nameCounter * .001)[1:]
                 else:
-                    be.groupName = ''.join(visGroupBuffer)
+                    be.groupName = groupNameBuffer
                     nameCounter = 0
                 WeightGrp_array.append(be)
                 f.seek(WeightRet, 0)
 
-            if print_debug_info:
-                print(WeightGrp_array)
+            print(WeightGrp_array)
             # Repeats for every mesh group
             for p in range(PolyGrpCount):
                 Vert_array = []
@@ -574,11 +563,7 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
                     f.seek(BuffParamStrOff2, 0)
                     BuffNameOff = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 0)
                     f.seek(BuffNameOff, 0)
-                    bufferNameBuffer = []
-                    while('\\' not in bufferNameBuffer):
-                        bufferNameBuffer.append(str(f.read(1))[2:3])
-                    del bufferNameBuffer[-1]
-                    BuffName = ''.join(bufferNameBuffer)
+                    BuffName = readVarLenString(f)
                     if (BuffName == "Position0"):
                         PosFmt = BuffParamFmt
                     elif (BuffName == "Normal0"):
@@ -595,14 +580,17 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
                 # Read vertice data
                 f.seek(VertOffStart + PolyGrp_array[p].verticeStart, 0)
 
-                if print_debug_info:
-                    print("Vert start: " + str(f.tell()))
+                print(PolyGrp_array[p].visGroupName + " Vert start: " + str(f.tell()))
                 for v in range(PolyGrp_array[p].verticeCount):
                     if (PosFmt == 1):
                         vx = struct.unpack('<f', f.read(4))[0]
                         vy = struct.unpack('<f', f.read(4))[0]
                         vz = struct.unpack('<f', f.read(4))[0]
-                        Vert_array.append([vx,vy,vz])
+                        if up_axis == 'Z':
+                            Vert_array.append([vx,vz,vy]) # XZY
+                        else:
+                            Vert_array.append([vx,vy,vz]) # XYZ
+                        
                     else:
                         print("Unknown position format!")
                     if (NormFmt == 6):
@@ -610,7 +598,11 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
                         ny = decompressHalfFloat(f.read(2)) * 2
                         nz = decompressHalfFloat(f.read(2)) * 2
                         nq = decompressHalfFloat(f.read(2)) * 2
-                        Normal_array.append([nx,ny,nz])
+                        if up_axis == 'Z':
+                            Normal_array.append([nx,nz,ny]) # XZY
+                        else:
+                            Normal_array.append([nx,ny,nz]) # XYZ
+                        
                     else:
                         print("Unknown normals format!")
                     if (TanFmt == 6):
@@ -621,14 +613,12 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
                     else:
                         print("Unknown tangents format!")
 
-                if print_debug_info:
-                    print("Vert end: " + str(f.tell()))
+                print(PolyGrp_array[p].visGroupName + " Vert end: " + str(f.tell()))
                 # Read UV map data if option is enabled
                 if use_uv_maps:
                     f.seek(UVOffStart + PolyGrp_array[p].UVStart, 0)
 
-                    if print_debug_info:
-                        print("UV start: " + str(f.tell()))
+                    print(PolyGrp_array[p].visGroupName + " UV start: " + str(f.tell()))
                     for v in range(PolyGrp_array[p].verticeCount):
                         if (UVCount == 0):
                             UV_array.append([0,0,0])
@@ -772,153 +762,154 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
                     else:
                         print("Importing more than 5 vertex color sets is not supported, skipping this set.")
 
-                if print_debug_info:
-                    print("UV end: " + str(f.tell()))
+                    print(PolyGrp_array[p].visGroupName + " UV end: " + str(f.tell()))
                 # Read face data
                 f.seek(FaceBuffOffset + PolyGrp_array[p].facepointStart, 0)
-                if print_debug_info:
-                    print("Face start: " + str(f.tell()))
+                print(PolyGrp_array[p].visGroupName + " Face start: " + str(f.tell()))
                 for fc in range(int(PolyGrp_array[p].facepointCount / 3)):
                     if (PolyGrp_array[p].faceLongBit == 0):
                         fa = struct.unpack('<H', f.read(2))[0] + 1 #unsigned + 1
                         fb = struct.unpack('<H', f.read(2))[0] + 1 #unsigned + 1
                         fc = struct.unpack('<H', f.read(2))[0] + 1 #unsigned + 1
-                        Face_array.append([fa,fb,fc])
+                        if up_axis == 'Z':
+                            Face_array.append([fa,fc,fb]) # XZY
+                        else:
+                            Face_array.append([fa,fb,fc]) # XYZ
+                        
 
                     elif (PolyGrp_array[p].faceLongBit == 1):
                         fa = struct.unpack('<L', f.read(4))[0] + 1 #unsigned + 1
                         fb = struct.unpack('<L', f.read(4))[0] + 1 #unsigned + 1
                         fc = struct.unpack('<L', f.read(4))[0] + 1 #unsigned + 1
-                        Face_array.append([fa,fb,fc])
+                        if up_axis == 'Z':
+                            Face_array.append([fa,fc,fb]) # XZY
+                        else:
+                            Face_array.append([fa,fb,fc]) # XYZ
+                        
                     else:
                         raise RuntimeError("Unknown face bit value!")
 
-                if print_debug_info:
-                    print("Face end: " + str(f.tell()))
+                print(PolyGrp_array[p].visGroupName + " Face end: " + str(f.tell()))
 
-                if (PolyGrp_array[p].singleBindName != ""):
-                    for b in range(len(BoneArray)):
-                        if (PolyGrp_array[p].SingleBindName == BoneArray[b].name):
-                            SingleBindID = b
-
-                    for b in range(len(Vert_array)):
-                        Weight_array.append(weight_data(SingleBindID, 1.0))
-                else:
-                    for b in range(len(Vert_array)):
-                        Weight_array.append(weight_data(0, 0))
-
-                    RigSet = 1
-                    for b in range(len(WeightGrp_array)):
-                            if (PolyGrp_array[p].visGroupName == WeightGrp_array[b].groupName):
-                                RigSet = b
-                                # WeightGrp_array[b].groupName = "" # Dumb fix due to shared group names but split entries, prevents crashing.
-                                break
-                    # Read vertice/weight group data
-                    f.seek(WeightGrp_array[RigSet].rigInfOffset, 0)
-                    if print_debug_info:
-                        print("Rig info start: " + str(f.tell()))
-
-                    if (WeightGrp_array[RigSet].rigInfCount != 0):
-                        for x in range(WeightGrp_array[RigSet].rigInfCount):
-                            RigBoneNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
-                            RigBuffStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
-                            RigBuffSize = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
-                            RigRet = f.tell()
-                            f.seek(RigBoneNameOffset, 0)
-                            rigBoneNameBuffer = []
-                            while('\\' not in rigBoneNameBuffer):
-                                rigBoneNameBuffer.append(str(f.read(1))[2:3])
-                            del rigBoneNameBuffer[-1]
-                            RigBoneName = ''.join(rigBoneNameBuffer)
-                            f.seek(RigBuffStart, 0)
-                            RigBoneID = 0
-                            for b in range(len(BoneArray)):
-                                if (RigBoneName == BoneArray[b].name):
-                                    RigBoneID = b
-
-                            if (RigBoneID == 0):
-                                print(RigBoneName + " doesn't exist on " + PolyGrp_array[p].visGroupName + "! Transferring rigging to " + BoneArray[1].name + ".")
-                                RigBoneID = 1
-
-                            for y in range(int(RigBuffSize / 0x06)):
-                                RigVertID = struct.unpack('<H', f.read(2))[0] + 1
-                                RigValue = struct.unpack('<f', f.read(4))[0]
-                                Weight_array[RigVertID].boneIDs.append(RigBoneID)
-                                Weight_array[RigVertID].weights.append(RigValue)
-
-                            f.seek(RigRet, 0)
-
-                    else:
-                        print(PolyGrp_array[p].visGroupName + " has no influences! Treating as a root singlebind instead.")
-                        Weight_array = []
-                        for b in range(len(Vert_array)):
-                            Weight_array.append(weight_data(1, 1.0))
+#                if (PolyGrp_array[p].singleBindName != ""):
+#                    for b in range(len(BoneArray)):
+#                        if (PolyGrp_array[p].SingleBindName == BoneArray[b].name):
+#                            SingleBindID = b
+#
+#                    for b in range(len(Vert_array)):
+#                        Weight_array.append(weight_data(SingleBindID, 1.0))
+#                else:
+#                    for b in range(len(Vert_array)):
+#                        Weight_array.append(weight_data(0, 0))
+#
+#                    RigSet = 1
+#                    for b in range(len(WeightGrp_array)):
+#                            if (PolyGrp_array[p].visGroupName == WeightGrp_array[b].groupName):
+#                                RigSet = b
+#                                # WeightGrp_array[b].groupName = "" # Dumb fix due to shared group names but split entries, prevents crashing.
+#                                break
+#                    # Read vertice/weight group data
+#                    f.seek(WeightGrp_array[RigSet].rigInfOffset, 0)
+#                    print(PolyGrp_array[p].visGroupName + " Rig info start: " + str(f.tell()))
+#
+#                    if (WeightGrp_array[RigSet].rigInfCount != 0):
+#                        for x in range(WeightGrp_array[RigSet].rigInfCount):
+#                            RigBoneNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+#                            RigBuffStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+#                            RigBuffSize = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+#                            RigRet = f.tell()
+#                            f.seek(RigBoneNameOffset, 0)
+#                            RigBoneName = readVarLenString(f)
+#                            f.seek(RigBuffStart, 0)
+#                            RigBoneID = 0
+#                            for b in range(len(BoneArray)):
+#                                if (RigBoneName == BoneArray[b].name):
+#                                    RigBoneID = b
+#
+#                            if (RigBoneID == 0):
+#                                print(RigBoneName + " doesn't exist on " + PolyGrp_array[p].visGroupName + "! Transferring rigging to " + BoneArray[1].name + ".")
+#                                RigBoneID = 1
+#
+#                            for y in range(int(RigBuffSize / 0x06)):
+#                                RigVertID = struct.unpack('<H', f.read(2))[0] + 1
+#                                RigValue = struct.unpack('<f', f.read(4))[0]
+#                                Weight_array[RigVertID].boneIDs.append(RigBoneID)
+#                                Weight_array[RigVertID].weights.append(RigValue)
+#
+#                            f.seek(RigRet, 0)
+#
+#                    else:
+#                        print(PolyGrp_array[p].visGroupName + " has no influences! Treating as a root singlebind instead.")
+#                        Weight_array = []
+#                        for b in range(len(Vert_array)):
+#                            Weight_array.append(weight_data(1, 1.0))
 
                 # Finally add the meshes into Blender
-                mesh = bpy.data.objects.new(PolyGrp_array[p].visGroupName, bpy.data.meshes.new(PolyGrp_array[p].visGroupName))
-                mesh.data.material.append(MODLGrp_array[PolyGrp_array[p].visGroupName])
-                mesh.data.use_auto_smooth = True
-                mesh.parent = bpy.data.objects[skelName]
-                
-                for bone in bpy.data.armatures[skelName].bones.values():
-                    mesh.vertex_groups.new(bone.name)
-                modifier = mesh.modifiers.new(skelName, type="ARMATURE")
-                modifier.object = skelName
+                mesh =  bpy.data.meshes.new(PolyGrp_array[p].visGroupName)
+                obj = bpy.data.objects.new(PolyGrp_array[p].visGroupName, mesh)
+                mesh.materials.append(bpy.data.materials[MODLGrp_array[PolyGrp_array[p].visGroupName]])
+                mesh.use_auto_smooth = True
+#                mesh.parent = bpy.data.objects[skelName]
+#                
+#                for bone in bpy.data.armatures[skelName].bones.values():
+#                    mesh.vertex_groups.new(bone.name)
+#                modifier = mesh.modifiers.new(skelName, type="ARMATURE")
+#                modifier.object = skelName
 
                 bm = bmesh.new()
-                bm.from_mesh(mesh.data)
+                bm.from_mesh(mesh)
                 
-                if (PolyGrp_array[p].singleBindName != ""):
-                        SingleBindID = 1
-                        for b in range(len(BoneName_array)):
-                            if (PolyGrp_array[p].singleBindName == BoneName_array[b]):
-                                SingleBindID = b
-                                break
-                        mesh.data.transform(BoneTrsArray[SingleBindID], shape_keys=False)
-                
-                if (BoneCount > 0):
-                    boneIDMap = []
-                    """
-                    for i in range(len(BoneCount)):
-                        # maxbone = getnodebyname BoneArray[i].name
-                        if (i != BoneCount):
-                            pass# skinOps.addBone skinMod maxbone 0
-                        else:
-                            pass# skinOps.addBone skinMod maxbone 1
-                    """
-                    # local numSkinBones = skinOps.GetNumberBones skinMod
-                    for bone in bpy.data.armatures[skelName].bones.values():
-                    # for i in range(len(numSkinBones)):
-                        # local boneName = skinOps.GetBoneName skinMod i 0
-                        for j in range(len(BoneCount)):
-                            if (bone.name == BoneArray[j].name):
-                                boneIDMap[j] = i
-                                j = BoneCount + 1
-                    """
-                    # These fix broken rigging for 3DS Max 2015 and above.
-                    for i in range(len(Vert_array)):
-                        skinOps.SetVertexWeights skinMod i 1 1
-                        skinOps.unnormalizeVertex skinMod i true 
-                        skinOps.SetVertexWeights skinMod i 1 0
-                        skinOps.unnormalizeVertex skinMod i false
-                    )"""
-                
-                weight_layer = bm.verts.layers.deform.new()
+#                if (PolyGrp_array[p].singleBindName != ""):
+#                        SingleBindID = 1
+#                        for b in range(len(BoneName_array)):
+#                            if (PolyGrp_array[p].singleBindName == BoneName_array[b]):
+#                                SingleBindID = b
+#                                break
+#                        mesh.transform(BoneTrsArray[SingleBindID], shape_keys=False)
+#                
+#                if (BoneCount > 0):
+#                    boneIDMap = []
+#                    
+#                    for i in range(len(BoneCount)):
+#                        # maxbone = getnodebyname BoneArray[i].name
+#                        if (i != BoneCount):
+#                            pass# skinOps.addBone skinMod maxbone 0
+#                        else:
+#                            pass# skinOps.addBone skinMod maxbone 1
+#                    
+#                    # local numSkinBones = skinOps.GetNumberBones skinMod
+#                    for bone in bpy.data.armatures[skelName].bones.values():
+#                    # for i in range(len(numSkinBones)):
+#                        # local boneName = skinOps.GetBoneName skinMod i 0
+#                        for j in range(len(BoneCount)):
+#                            if (bone.name == BoneArray[j].name):
+#                                boneIDMap[j] = i
+#                                j = BoneCount + 1
+#                    
+#                    # These fix broken rigging for 3DS Max 2015 and above.
+#                    for i in range(len(Vert_array)):
+#                        skinOps.SetVertexWeights skinMod i 1 1
+#                        skinOps.unnormalizeVertex skinMod i true 
+#                        skinOps.SetVertexWeights skinMod i 1 0
+#                        skinOps.unnormalizeVertex skinMod i false
+#                    )
+#                
+#                weight_layer = bm.verts.layers.deform.new()
                 for vert in range(len(Vert_array)):
                     bmv = bm.verts.new(Vert_array[vert])
                     bmv.normal = Normal_array[vert]
 
-                    for w in Weight_array:
-                        bi = [] # bone index array
-                        wv = [] # weight value array
-
-                        for j in range(len(w.boneIDs)):
-                            boneid = w.boneIDs[j]
-                            weight = w.weights[j]
-                            bi.append(boneIDMap[boneid])
-                            wv.append(weight)
-
-                        bmv[weight_layer][bi] = wv
+#                    for w in Weight_array:
+#                        bi = [] # bone index array
+#                        wv = [] # weight value array
+#
+#                        for j in range(len(w.boneIDs)):
+#                            boneid = w.boneIDs[j]
+#                            weight = w.weights[j]
+#                            bi.append(boneIDMap[boneid])
+#                            wv.append(weight)
+#
+#                        bmv[weight_layer][bi] = wv
                 # Required after adding / removing vertices and before accessing them
                 # by index.
                 bm.verts.ensure_lookup_table()
@@ -945,13 +936,18 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
                         tex_layer_5 = bm.faces.layers.tex.new()
 
                 for face in range(len(Face_array)):
-                    bmf = bm.faces.new(Face_array[face])
+                    p0 = Face_array[face][0] - 1
+                    p1 = Face_array[face][1] - 1
+                    p2 = Face_array[face][2] - 1
+                    bmf = bm.faces.new([bm.verts[p0], bm.verts[p1], bm.verts[p2]])
 
                     if use_uv_maps:
                             if (len(UV_array) > 0):
-                                face[tex_layer].image = bpy.data.images[Materials_array[Materials_array.index(MODLGrp_array[PolyGrp_array[p].visGroupName])].color1Name + texture_ext].name
+                                print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
+                                #face[tex_layer].image = findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext
                             if (len(UV2_array) > 0):
-                                face[tex_layer_2].image = bpy.data.images[Materials_array[Materials_array.index(MODLGrp_array[PolyGrp_array[p].visGroupName])].color2Name + texture_ext].name
+                                print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
+                                #face[tex_layer_2].image = findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext
                             """ Images can currently be linked only with the first 2 UV maps
                             if (len(UV3_array) > 0):
                                 face[tex_layer_3].image = 
@@ -959,8 +955,9 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
                                 face[tex_layer_4].image = 
                             if (len(UV5_array) > 0):
                                 face[tex_layer_5].image = """
-
-                    for loop in face.loops:
+                
+                for surface in bm.faces:
+                    for loop in surface.loops:
                         if use_vertex_colors:
                             for j in range(len(Color_array)):
                                 loop[color_layer][0] = Color_array[loop.vert.index][0]
@@ -980,14 +977,14 @@ def importMeshes(context, MSHName, use_vertex_colors=True, use_uv_maps=True, rem
                             if (len(UV5_array) > 0):
                                 loop[uv_layer_5].uv = UV5_array[loop.vert.index]
 
-                for poly in mesh.data.polygons:
+                for poly in mesh.polygons:
                     poly.use_smooth = True
                                  
                 if remove_doubles:
                     bmesh.ops.remove_doubles(bm, verts = bm.verts)
                 bm.to_mesh(mesh)
                 bm.free()
-                bpy.context.scene.objects.link(mesh)
+                bpy.context.scene.objects.link(obj)
 
         print("Done! Mesh import completed in " + str((time.time()-time_start)*0.001) + " seconds.")
 
@@ -1000,6 +997,14 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
     bl_label = ("NUMDLB Import")
     filename_ext = ".numdlb"
     filter_glob = bpy.props.StringProperty(default="*.numdlb", options={'HIDDEN'})
+    
+    up_axis = bpy.props.EnumProperty(
+            name="Up Axis",
+            description="The axis all objects will point upwards with",
+            items=(('Y', "Y", "Objects will appear sideways front and back"),
+                   ('Z', "Z", "Objects will appear upright")),
+            default='Y',
+            )
     
     use_vertex_colors = bpy.props.BoolProperty(
             name="Vertex Colors",
@@ -1031,12 +1036,6 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
             default=True,
             )
 
-    print_debug_info = bpy.props.BoolProperty(
-            name="Debugging Information",
-            description="Print extra information to console",
-            default=False,
-            )
-    
     texture_ext = bpy.props.StringProperty(
             name="Texture File Extension",
             description="The file type to be associated with the texture names",
@@ -1046,13 +1045,6 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
     def execute(self, context):
         keywords = self.as_keywords(ignore=("filter_glob", "auto_rotate"))
         getModelInfo(context, **keywords)
-
-        # Rotate armature if option is enabled
-        if auto_rotate:
-            bpy.ops.object.select_all(action='TOGGLE')
-            bpy.ops.object.select_pattern(pattern="*Armature*")
-            bpy.ops.transform.rotate(value=1.570796, axis=(1, 0, 0), constraint_axis=(True, False, False), constraint_orientation='GLOBAL', mirror=False, proportional='DISABLED', proportional_edit_falloff='SMOOTH', proportional_size=1)
-            bpy.ops.object.select_all(action='TOGGLE')
 
         context.scene.update()
         return {"FINISHED"}
