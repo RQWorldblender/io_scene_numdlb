@@ -139,7 +139,7 @@ class WeightGrpStruct:
         self.rigInfCount =  0
     
     def __repr__(self):
-        return str(self.groupName) + "\t| Subgroup #: " + str(self.subGroupNum) + "\t| Weight info max: " + str(self.weightInfMax) + "\t| Weight flags" + str(self.weightFlag2) + ", " + str(self.weightFlag3) + ", " + str(self.weightFlag4) + "\t| Rig info offset: " + str(self.rigInfOffset) + "\t| Rig info count: " + str(self.rigInfCount) + "\n"
+        return str(self.groupName) + "\t| Subgroup #: " + str(self.subGroupNum) + "\t| Weight info max: " + str(self.weightInfMax) + "\t| Weight flags: " + str(self.weightFlag2) + ", " + str(self.weightFlag3) + ", " + str(self.weightFlag4) + "\t| Rig info offset: " + str(self.rigInfOffset) + "\t| Rig info count: " + str(self.rigInfCount) + "\n"
 
 def findUVImageForMesh(matNameQuery, useUVMap2):
     for mat in Materials_array:
@@ -148,7 +148,7 @@ def findUVImageForMesh(matNameQuery, useUVMap2):
                 return mat.color2Name
             else:
                 return mat.color1Name
-    return
+    return ""
 
 def readVarLenString(file):
     nameBuffer = []
@@ -328,24 +328,30 @@ def importMaterials(context, MATName, texture_ext=".png"):
                         tex = bpy.data.textures[Materials_array[m].color1Name]
                     else:
                         tex = bpy.data.textures.new(Materials_array[m].color1Name, type='IMAGE')
-                    img = bpy.data.images.load(os.path.join(os.path.relpath(dirPath), Materials_array[m].color1Name + texture_ext), check_existing=True)
-                    tex.image = img
-                    if (mat.texture_slots.find(tex.name) == -1):
-                        slot = mat.texture_slots.add()
-                        slot.texture = tex
-                        slot.texture_coords = 'UV'
+
+                    imgPath = os.path.join(os.path.relpath(dirPath), Materials_array[m].color1Name + texture_ext)
+                    if os.path.isfile(imgPath):
+                        img = bpy.data.images.load(imgPath, check_existing=True)
+                        tex.image = img
+                        if (mat.texture_slots.find(tex.name) == -1):
+                            slot = mat.texture_slots.add()
+                            slot.texture = tex
+                            slot.texture_coords = 'UV'
                 # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
                 if (Materials_array[m].color2Name != ""):
                     if (bpy.data.textures.find(Materials_array[m].color2Name) > 0):
                         altTex = bpy.data.textures[Materials_array[m].color2Name]
                     else:
                         altTex = bpy.data.textures.new(Materials_array[m].color2Name, type='IMAGE')
-                    altImg = bpy.data.images.load(os.path.join(os.path.relpath(dirPath), Materials_array[m].color2Name + texture_ext), check_existing=True)
-                    altTex.image = altImg
-                    if (mat.texture_slots.find(altTex.name) == -1):
-                        altSlot = mat.texture_slots.add()
-                        altSlot.texture = altTex
-                        altSlot.texture_coords = 'UV'
+
+                    altImgPath = os.path.join(os.path.relpath(dirPath), Materials_array[m].color2Name + texture_ext)
+                    if os.path.isfile(altImgPath):
+                        altImg = bpy.data.images.load(altImgPath, check_existing=True)
+                        altTex.image = altImg
+                        if (mat.texture_slots.find(altTex.name) == -1):
+                            altSlot = mat.texture_slots.add()
+                            altSlot.texture = altTex
+                            altSlot.texture_coords = 'UV'
 
         print(Materials_array)
 
@@ -487,7 +493,7 @@ def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_c
                 PolyGrpRet = f.tell()
                 f.seek(VisGrpNameOffset, 0)
                 visGroupBuffer = readVarLenString(f)
-                if (len(PolyGrp_array) > 0 and PolyGrp_array[g - 1].visGroupName == visGroupBuffer):
+                if (len(PolyGrp_array) > 0 and (PolyGrp_array[g - 1].visGroupName == visGroupBuffer or PolyGrp_array[g - 1].visGroupName[:-4] == visGroupBuffer)):
                     nameCounter += 1
                     ge.visGroupName = visGroupBuffer + str(nameCounter * .001)[1:]
                 else:
@@ -523,7 +529,7 @@ def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_c
                 WeightRet = f.tell()
                 f.seek(GrpNameOffset, 0)
                 groupNameBuffer = readVarLenString(f)
-                if (len(WeightGrp_array) > 0 and WeightGrp_array[b - 1].groupName == groupNameBuffer):
+                if (len(WeightGrp_array) > 0 and (WeightGrp_array[b - 1].groupName == groupNameBuffer or WeightGrp_array[b - 1].groupName[:-4] == groupNameBuffer)):
                     nameCounter += 1
                     be.groupName = groupNameBuffer + str(nameCounter * .001)[1:]
                 else:
@@ -793,14 +799,14 @@ def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_c
 
 #                if (PolyGrp_array[p].singleBindName != ""):
 #                    for b in range(len(BoneArray)):
-#                        if (PolyGrp_array[p].SingleBindName == BoneArray[b].name):
+#                        if (PolyGrp_array[p].singleBindName == BoneArray[b].name):
 #                            SingleBindID = b
 #
 #                    for b in range(len(Vert_array)):
-#                        Weight_array.append(weight_data(SingleBindID, 1.0))
+#                        Weight_array.append(weight_data([SingleBindID], [1.0]))
 #                else:
 #                    for b in range(len(Vert_array)):
-#                        Weight_array.append(weight_data(0, 0))
+#                        Weight_array.append(weight_data([0], [0]))
 #
 #                    RigSet = 1
 #                    for b in range(len(WeightGrp_array)):
@@ -831,7 +837,7 @@ def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_c
 #                                RigBoneID = 1
 #
 #                            for y in range(int(RigBuffSize / 0x06)):
-#                                RigVertID = struct.unpack('<H', f.read(2))[0] + 1
+#                                RigVertID = struct.unpack('<H', f.read(2))[0]
 #                                RigValue = struct.unpack('<f', f.read(4))[0]
 #                                Weight_array[RigVertID].boneIDs.append(RigBoneID)
 #                                Weight_array[RigVertID].weights.append(RigValue)
@@ -842,12 +848,21 @@ def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_c
 #                        print(PolyGrp_array[p].visGroupName + " has no influences! Treating as a root singlebind instead.")
 #                        Weight_array = []
 #                        for b in range(len(Vert_array)):
-#                            Weight_array.append(weight_data(1, 1.0))
+#                            Weight_array.append(weight_data([1], [1.0]))
+#
+#                    print(Weight_array)
 
                 # Finally add the meshes into Blender
                 mesh =  bpy.data.meshes.new(PolyGrp_array[p].visGroupName)
                 obj = bpy.data.objects.new(PolyGrp_array[p].visGroupName, mesh)
-                mesh.materials.append(bpy.data.materials[MODLGrp_array[PolyGrp_array[p].visGroupName]])
+                try:
+                    if (len(MODLGrp_array[PolyGrp_array[p].visGroupName]) > 63):
+                        mesh.materials.append(bpy.data.materials[MODLGrp_array[PolyGrp_array[p].visGroupName][:63]])
+                    else:
+                        mesh.materials.append(bpy.data.materials[MODLGrp_array[PolyGrp_array[p].visGroupName]])
+                except:
+                    # In case material cannot be found
+                    continue
                 mesh.use_auto_smooth = True
 #                mesh.parent = bpy.data.objects[skelName]
 #                
@@ -939,7 +954,11 @@ def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_c
                     p0 = Face_array[face][0] - 1
                     p1 = Face_array[face][1] - 1
                     p2 = Face_array[face][2] - 1
-                    bmf = bm.faces.new([bm.verts[p0], bm.verts[p1], bm.verts[p2]])
+                    try:
+                        bmf = bm.faces.new([bm.verts[p0], bm.verts[p1], bm.verts[p2]])
+                    except:
+                        # Face already exists
+                        continue
 
                     if use_uv_maps:
                             if (len(UV_array) > 0):
@@ -986,7 +1005,12 @@ def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_c
                 bm.free()
                 bpy.context.scene.objects.link(obj)
 
-        print("Done! Mesh import completed in " + str((time.time()-time_start)*0.001) + " seconds.")
+                bpy.ops.object.select_all(action="DESELECT")
+                obj.select = True
+                bpy.context.scene.objects.active = obj
+                bpy.ops.object.shade_smooth()
+
+        print("Done! Mesh import completed in " + str((time.time()-time_start)) + " seconds.")
 
 # ==== Import OPERATOR ====
 from bpy_extras.io_utils import (ImportHelper)

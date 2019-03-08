@@ -68,15 +68,15 @@ class MatStruct:
 class weight_data:
     # struct weight_data (boneids, weights)
     def __init__(self):
-        self.boneIDs = 0
-        self.weights = 0
+        self.boneIDs = []
+        self.weights = []
 
     def __init__(self, boneIDs, weights):
         self.boneIDs = boneIDs
         self.weights = weights
     
     def __repr__(self):
-        return "Bone IDs:\n" + str(self.boneIDs) + "\t| Weights:\n" + str(self.weights) + "\n"
+        return "Bone IDs: " + str(self.boneIDs) + "\t| Weights: " + str(self.weights) + "\n"
 
 class PolyGrpStruct:
     # struct PolyGrpStruct (VisGrpName, SingleBindName, FacepointCount, FacepointStart, FaceLongBit, VertCount, VertStart, VertStride, UVStart, UVStride, BuffParamStart, BuffParamCount)
@@ -110,7 +110,7 @@ class WeightGrpStruct:
         self.rigInfCount =  0
 
     def __repr__(self):
-        return str(self.groupName) + "\t| Subgroup #: " + str(self.subGroupNum) + "\t| Weight info max: " + str(self.weightInfMax) + "\t| Weight flags" + str(self.weightFlag2) + ", " + str(self.weightFlag3) + ", " + str(self.weightFlag4) + "\t| Rig info offset: " + str(self.rigInfOffset) + "\t| Rig info count: " + str(self.rigInfCount) + "\n"
+        return str(self.groupName) + "\t| Subgroup #: " + str(self.subGroupNum) + "\t| Weight info max: " + str(self.weightInfMax) + "\t| Weight flags: " + str(self.weightFlag2) + ", " + str(self.weightFlag3) + ", " + str(self.weightFlag4) + "\t| Rig info offset: " + str(self.rigInfOffset) + "\t| Rig info count: " + str(self.rigInfCount) + "\n"
 
 # Global variables used by all of the main functions
 dirPath = ""
@@ -138,7 +138,7 @@ def findUVImageForMesh(matNameQuery, useUVMap2):
                 return mat.color2Name
             else:
                 return mat.color1Name
-    return
+    return ""
 
 def readVarLenString(file):
     nameBuffer = []
@@ -337,6 +337,9 @@ def importSkeleton(SKTName):
                     print(tfm)
                     print("Matrix for " + BoneName_array[c] + ":\n" + str(tfm))
 
+                BoneArray.append(BoneName_array[c])
+                BoneTrsArray.append(tfm)
+
 # Imports the meshes
 def importMeshes(MSHName):
     with open(MSHName, 'rb') as f:
@@ -394,7 +397,7 @@ def importMeshes(MSHName):
                 PolyGrpRet = f.tell()
                 f.seek(VisGrpNameOffset, 0)
                 visGroupBuffer = readVarLenString(f)
-                if (len(PolyGrp_array) > 0 and PolyGrp_array[g - 1].visGroupName == visGroupBuffer):
+                if (len(PolyGrp_array) > 0 and (PolyGrp_array[g - 1].visGroupName == visGroupBuffer or PolyGrp_array[g - 1].visGroupName[:-4] == visGroupBuffer)):
                     nameCounter += 1
                     ge.visGroupName = visGroupBuffer + str(nameCounter * .001)[1:]
                 else:
@@ -433,7 +436,7 @@ def importMeshes(MSHName):
                 WeightRet = f.tell()
                 f.seek(GrpNameOffset, 0)
                 groupNameBuffer = readVarLenString(f)
-                if (len(WeightGrp_array) > 0 and WeightGrp_array[b - 1].groupName == groupNameBuffer):
+                if (len(WeightGrp_array) > 0 and (WeightGrp_array[b - 1].groupName == groupNameBuffer or WeightGrp_array[b - 1].groupName[:-4] == groupNameBuffer)):
                     nameCounter += 1
                     be.groupName = groupNameBuffer + str(nameCounter * .001)[1:]
                 else:
@@ -579,7 +582,7 @@ def importMeshes(MSHName):
                         UV4_array.append([tu4,tv4,0])
                         UV5_array.append([tu5,tv5,0])
                     else:
-                        raise RuntimeError("More than 5 UV sets, crashing gracefully.")
+                        print("Importing more than 5 UV sets is not supported, skipping this set.")
                     # Read vertex color data
                     if (ColorCount == 0):
                         Color_array.append([128,128,128])
@@ -665,7 +668,7 @@ def importMeshes(MSHName):
                         Color4_array.append([colorr4,colorg4,colorb4]); Alpha4_array.append(colora4)
                         Color5_array.append([colorr5,colorg5,colorb5]); Alpha5_array.append(colora5)
                     else:
-                        raise RuntimeError("More than 5 color sets, crashing gracefully.")
+                        print("Importing more than 5 vertex color sets is not supported, skipping this set.")
 
                 if print_debug_info:
                     print(PolyGrp_array[p].visGroupName + " UV end: " + str(f.tell()))
@@ -693,15 +696,15 @@ def importMeshes(MSHName):
                     #print(Face_array)
 
                 if (PolyGrp_array[p].singleBindName != ""):
-                    # for b in range(len(BoneArray)):
-                    #    if (PolyGrp_array[p].SingleBindName == BoneArray[b].name):
-                    #        SingleBindID = b
+                    for b in range(len(BoneArray)):
+                       if (PolyGrp_array[p].singleBindName == BoneArray[b]):
+                           SingleBindID = b
 
                     for b in range(len(Vert_array)):
-                        Weight_array.append(weight_data(SingleBindID, 1.0))
+                        Weight_array.append(weight_data([SingleBindID], [1.0]))
                 else:
                     for b in range(len(Vert_array)):
-                        Weight_array.append(weight_data(0, 0))
+                        Weight_array.append(weight_data([0], [0]))
 
                     RigSet = 1
                     for b in range(len(WeightGrp_array)):
@@ -724,36 +727,39 @@ def importMeshes(MSHName):
                             RigBoneName = readVarLenString(f)
                             f.seek(RigBuffStart, 0)
                             RigBoneID = 0
-                            # for b in range(len(BoneArray)):
-                            #     if (RigBoneName == BoneArray[b].name):
-                            #         RigBoneID = b
+                            for b in range(len(BoneArray)):
+                                if (RigBoneName == BoneArray[b]):
+                                    RigBoneID = b
 
                             if (RigBoneID == 0):
-                                #print(RigBoneName + " doesn't exist on " + PolyGrp_array[p].visGroupName + "! Transferring rigging to " + BoneArray[1] + ".")
+                                print(RigBoneName + " doesn't exist on " + PolyGrp_array[p].visGroupName + "! Transferring rigging to " + BoneArray[1] + ".")
                                 RigBoneID = 1
 
                             for y in range(int(RigBuffSize / 0x06)):
-                                RigVertID = struct.unpack('<H', f.read(2))[0] + 1
+                                RigVertID = struct.unpack('<H', f.read(2))[0]
                                 RigValue = struct.unpack('<f', f.read(4))[0]
-                                # Weight_array[RigVertID].boneIDs.append(RigBoneID)
-                                # Weight_array[RigVertID].weights.append(RigValue)
+                                Weight_array[RigVertID].boneIDs.append(RigBoneID)
+                                Weight_array[RigVertID].weights.append(RigValue)
 
                             f.seek(RigRet, 0)
 
                     else:
-                        #print(PolyGrp_array[p].visGroupName + " has no influences! Treating as a root singlebind instead.")
+                        print(PolyGrp_array[p].visGroupName + " has no influences! Treating as a root singlebind instead.")
                         Weight_array = []
                         for b in range(len(Vert_array)):
-                            Weight_array.append(weight_data(1, 1.0))
+                            Weight_array.append(weight_data([1], [1.0]))
 
-                print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
-                print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
+                    print(Weight_array)
 
-        print("Done! Mesh import completed in " + str((time.time()-time_start)*0.001) + " seconds.")
+                #print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
+                #print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
 
-modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/body/c00/model.numdlb"
+        print("Done! Mesh import completed in " + str((time.time()-time_start)) + " seconds.")
+
+#modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/body/c00/model.numdlb"
+modelpath = "/media/richard/3AEE25744CE0956E/Smash Ultimate Models/fighter/mario/model/body/c00/model.numdlb"
 getModelInfo(modelpath)
 
-importMaterials(MATName)
+#importMaterials(MATName)
 importSkeleton(SKTName)
 importMeshes(MSHName)
