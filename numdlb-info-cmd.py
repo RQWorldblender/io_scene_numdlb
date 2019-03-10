@@ -315,7 +315,7 @@ def importSkeleton(SKTName):
                 BoneName = readVarLenString(b)
                 b.seek(BoneRet, 0)
                 BoneID = struct.unpack('<H', b.read(2))[0]
-                BoneParent = struct.unpack('<H', b.read(2))[0] + 1
+                BoneParent = struct.unpack('<H', b.read(2))[0]
                 BoneUnk = struct.unpack('<L', b.read(4))[0]
                 BoneParent_array.append(BoneParent)
                 BoneName_array.append(BoneName)
@@ -332,13 +332,14 @@ def importSkeleton(SKTName):
                 m21 = struct.unpack('<f', b.read(4))[0]; m22 = struct.unpack('<f', b.read(4))[0]; m23 = struct.unpack('<f', b.read(4))[0]; m24 = struct.unpack('<f', b.read(4))[0]
                 m31 = struct.unpack('<f', b.read(4))[0]; m32 = struct.unpack('<f', b.read(4))[0]; m33 = struct.unpack('<f', b.read(4))[0]; m34 = struct.unpack('<f', b.read(4))[0]
                 m41 = struct.unpack('<f', b.read(4))[0]; m42 = struct.unpack('<f', b.read(4))[0]; m43 = struct.unpack('<f', b.read(4))[0]; m44 = struct.unpack('<f', b.read(4))[0]
-                tfm = [m11, m21, m31, m41, m12, m22, m32, m42, m13, m23, m33, m43, m14, m24, m34, m44]
+                tfm = [[m11, m21, m31, m41], [m12, m22, m32, m42], [m13, m23, m33, m43], [m14, m24, m34, m44]]
                 if print_debug_info:
-                    print(tfm)
                     print("Matrix for " + BoneName_array[c] + ":\n" + str(tfm))
 
                 BoneArray.append(BoneName_array[c])
                 BoneTrsArray.append(tfm)
+                if (BoneParent_array[c] != 65535):
+                    print(BoneName_array[BoneParent_array[c]])
 
 # Imports the meshes
 def importMeshes(MSHName):
@@ -496,7 +497,7 @@ def importMeshes(MSHName):
 
                 if print_debug_info:
                     print(PolyGrp_array[p].visGroupName + " Vert start: " + str(f.tell()))
-                print("PosFmt: " + str(PosFmt) + " | NormFmt: " + str(NormFmt) + " | TanFmt: " + str(TanFmt))
+                #print("PosFmt: " + str(PosFmt) + " | NormFmt: " + str(NormFmt) + " | TanFmt: " + str(TanFmt))
                 for v in range(PolyGrp_array[p].verticeCount):
                     if (PosFmt == 1):
                         vx = struct.unpack('<f', f.read(4))[0]
@@ -523,7 +524,7 @@ def importMeshes(MSHName):
 
                 if print_debug_info:
                     print(PolyGrp_array[p].visGroupName + " Vert end: " + str(f.tell()))
-                    #print(Vert_array)
+                    print(len(Vert_array))
                 # Read UV map data
                 f.seek(UVOffStart + PolyGrp_array[p].UVStart, 0)
 
@@ -670,14 +671,15 @@ def importMeshes(MSHName):
                         for b in range(len(Vert_array)):
                             Weight_array.append(weight_data([1], [1.0]))
 
+                print(len(Weight_array))
                 #print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
                 #print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
 
-        print("Done! Mesh import completed in " + str(round(time.time() - time_start)) + " seconds.")
+        print("Done! Mesh import completed in " + str(round(time.time() - time_start, 3)) + " seconds.")
 
 #modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/body/c00/model.numdlb"
 #modelpath = "/media/richard/3AEE25744CE0956E/Smash Ultimate Models/fighter/mario/model/body/c00/model.numdlb"
-modelpath = "/opt/Smash Ultimate Models/fighter/pikachu/model/body/c00/model.numdlb"
+modelpath = "/opt/Smash Ultimate Models/fighter/packun/model/body/c00/model.numdlb"
 getModelInfo(modelpath)
 
 #importMaterials(MATName)

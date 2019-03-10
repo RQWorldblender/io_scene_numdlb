@@ -154,14 +154,6 @@ def getModelInfo(context, filepath, image_transparency=True, texture_ext=".png",
     global skelName; skelName = ""
     global MODLGrp_array; MODLGrp_array = {}
     global Materials_array; Materials_array = []
-    global BoneCount; BoneCount = 0
-    global BoneArray; BoneArray = []
-    global BoneFixArray; BoneFixArray = []
-    global BoneTrsArray; BoneTrsArray = []
-    global BoneParent_array; BoneParent_array = []
-    global BoneName_array; BoneName_array = []
-    global PolyGrp_array; PolyGrp_array = []
-    global WeightGrp_array; WeightGrp_array = []
     
     if os.path.isfile(filepath):
         with open(filepath, 'rb') as md:
@@ -215,8 +207,8 @@ def getModelInfo(context, filepath, image_transparency=True, texture_ext=".png",
         
         if os.path.isfile(MATName):
             importMaterials(context, MATName, image_transparency, texture_ext)
-#        if os.path.isfile(SKTName):
-#            importSkeleton(context, SKTName, connect_bones)
+        if os.path.isfile(SKTName):
+            importSkeleton(context, SKTName, connect_bones)
         if os.path.isfile(MSHName):
             importMeshes(context, MSHName, texture_ext, up_axis, use_vertex_colors, use_uv_maps, remove_doubles)
         
@@ -346,6 +338,13 @@ def importMaterials(context, MATName, image_transparency=True, texture_ext=".png
 
 # Imports the skeleton
 def importSkeleton(context, SKTName, connect_bones=False):
+    global BoneCount; BoneCount = 0
+    global BoneArray; BoneArray = []
+    global BoneFixArray; BoneFixArray = []
+    global BoneTrsArray; BoneTrsArray = []
+    global BoneParent_array; BoneParent_array = []
+    global BoneName_array; BoneName_array = []
+
     with open(SKTName, 'rb') as b:
         b.seek(0x10, 0)
         BoneCheck = struct.unpack('<L', b.read(4))[0]
@@ -370,7 +369,7 @@ def importSkeleton(context, SKTName, connect_bones=False):
                 BoneName = readVarLenString(b)
                 b.seek(BoneRet, 0)
                 BoneID = struct.unpack('<H', b.read(2))[0]
-                BoneParent = struct.unpack('<H', b.read(2))[0] + 1
+                BoneParent = struct.unpack('<H', b.read(2))[0]
                 BoneUnk = struct.unpack('<L', b.read(4))[0]
                 BoneParent_array.append(BoneParent)
                 BoneName_array.append(BoneName)
@@ -381,6 +380,7 @@ def importSkeleton(context, SKTName, connect_bones=False):
 
             b.seek(BoneMatrOffset, 0)
             # Before adding the bones, create a new armature and select it
+            global skelName
             skelName = MODLName + "-armature"
             skel = bpy.data.objects.new(skelName, bpy.data.armatures.new(skelName))
             skel.data.draw_type = 'STICK'
@@ -398,7 +398,7 @@ def importSkeleton(context, SKTName, connect_bones=False):
                 m31 = struct.unpack('<f', b.read(4))[0]; m32 = struct.unpack('<f', b.read(4))[0]; m33 = struct.unpack('<f', b.read(4))[0]; m34 = struct.unpack('<f', b.read(4))[0]
                 m41 = struct.unpack('<f', b.read(4))[0]; m42 = struct.unpack('<f', b.read(4))[0]; m43 = struct.unpack('<f', b.read(4))[0]; m44 = struct.unpack('<f', b.read(4))[0]
                 #tfm = matrix3 [m11,m12,m13] [m21,m22,m23] [m31,m32,m33] [m41,m42,m43] 
-                tfm = [m11, m21, m31, m41, m12, m22, m32, m42, m13, m23, m33, m43, m14, m24, m34, m44]
+                tfm = mathutils.Matrix([[m11, m21, m31, m41], [m12, m22, m32, m42], [m13, m23, m33, m43], [m14, m24, m34, m44]])
                 print("Matrix for " + BoneName_array[c] + ":\n" + str(tfm))
                 newBone = skel.data.edit_bones.new(BoneName_array[c])
                 # Advance to each column first, then row
@@ -407,27 +407,31 @@ def importSkeleton(context, SKTName, connect_bones=False):
                     newBone.use_connect = True
                 else:
                     # Bones must a be non-zero length, or Blender will eventually remove them
-                    newBone.tail = (0.0, 0.01, 0)
+                    newBone.tail = (newBone.head.x, newBone.head.y + 0.01, newBone.head.z)
                 newBone.use_deform = True
                 newBone.use_inherit_rotation = True
                 newBone.use_inherit_scale = True
-                newBone.use_inherit_location = True
-                if (BoneParent_array[c] != 0):
-                    newBone.parent = BoneArray[BoneParent[c]]
+                newBone.use_local_location = True
+                if (BoneParent_array[c] != 65535):
+                    newBone.parent = skel.data.edit_bones[BoneName_array[BoneParent_array[c]]]
                 elif connect_bones:
                     # The parent bone, named "Trans", must a be non-zero length, or Blender will eventually remove it
-                    newBone.tail = (0.0, 0.01, 0)
+                   newBone.tail = (newBone.head.x, newBone.head.y + 0.01, newBone.head.z)
                 # if (BoneParent[c] > c):
-                #     BoneFixArray.append(c) # This thing again?
+                #     BoneFixArray.append(c) # This thing again?       
                 BoneArray.append(newBone)
                 BoneTrsArray.append(newBone.matrix)
 
+            bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
             # for x in range(len(BoneFixArray)):
             #     select BoneArray[BoneFixArray[x]]
             #     $.parent = BoneArray[BoneParent_array[BoneFixArray[x]]]
 
 # Imports the meshes
 def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_colors=True, use_uv_maps=True, remove_doubles=False):
+    global PolyGrp_array; PolyGrp_array = []
+    global WeightGrp_array; WeightGrp_array = []
+
     with open(MSHName, 'rb') as f:
         time_start = time.time()
         # struct weight_data (boneids, weights)
@@ -708,64 +712,65 @@ def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_c
 
                 print(PolyGrp_array[p].visGroupName + " Face end: " + str(f.tell()))
 
-#                if (PolyGrp_array[p].singleBindName != ""):
-#                    for b in range(len(BoneArray)):
-#                        if (PolyGrp_array[p].singleBindName == BoneArray[b].name):
-#                            SingleBindID = b
-#
-#                    for b in range(len(Vert_array)):
-#                        Weight_array.append(weight_data([SingleBindID], [1.0]))
-#                else:
-#                    for b in range(len(Vert_array)):
-#                        Weight_array.append(weight_data([0], [0]))
-#
-#                    RigSet = 1
-#                    for b in range(len(WeightGrp_array)):
-#                            if (PolyGrp_array[p].visGroupName == WeightGrp_array[b].groupName):
-#                                RigSet = b
-#                                # WeightGrp_array[b].groupName = "" # Dumb fix due to shared group names but split entries, prevents crashing.
-#                                break
-#                    # Read vertice/weight group data
-#                    f.seek(WeightGrp_array[RigSet].rigInfOffset, 0)
-#                    print(PolyGrp_array[p].visGroupName + " Rig info start: " + str(f.tell()))
-#
-#                    if (WeightGrp_array[RigSet].rigInfCount != 0):
-#                        for x in range(WeightGrp_array[RigSet].rigInfCount):
-#                            RigBoneNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
-#                            RigBuffStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
-#                            RigBuffSize = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
-#                            RigRet = f.tell()
-#                            f.seek(RigBoneNameOffset, 0)
-#                            RigBoneName = readVarLenString(f)
-#                            f.seek(RigBuffStart, 0)
-#                            RigBoneID = 0
-#                            for b in range(len(BoneArray)):
-#                                if (RigBoneName == BoneArray[b].name):
-#                                    RigBoneID = b
-#
-#                            if (RigBoneID == 0):
-#                                print(RigBoneName + " doesn't exist on " + PolyGrp_array[p].visGroupName + "! Transferring rigging to " + BoneArray[1].name + ".")
-#                                RigBoneID = 1
-#
-#                            for y in range(int(RigBuffSize / 0x06)):
-#                                RigVertID = struct.unpack('<H', f.read(2))[0]
-#                                RigValue = struct.unpack('<f', f.read(4))[0]
-#                                Weight_array[RigVertID].boneIDs.append(RigBoneID)
-#                                Weight_array[RigVertID].weights.append(RigValue)
-#
-#                            f.seek(RigRet, 0)
-#
-#                    else:
-#                        print(PolyGrp_array[p].visGroupName + " has no influences! Treating as a root singlebind instead.")
-#                        Weight_array = []
-#                        for b in range(len(Vert_array)):
-#                            Weight_array.append(weight_data([1], [1.0]))
-#
-#                    print(Weight_array)
+                if (PolyGrp_array[p].singleBindName != ""):
+                    for b in range(len(BoneArray)):
+                        if (PolyGrp_array[p].singleBindName == BoneArray[b].name):
+                            SingleBindID = b
+
+                    for b in range(len(Vert_array)):
+                        Weight_array.append(weight_data([SingleBindID], [1.0]))
+                else:
+                    for b in range(len(Vert_array)):
+                        Weight_array.append(weight_data([0], [0]))
+
+                    RigSet = 1
+                    for b in range(len(WeightGrp_array)):
+                            if (PolyGrp_array[p].visGroupName == WeightGrp_array[b].groupName):
+                                RigSet = b
+                                break
+                    # Read vertice/weight group data
+                    f.seek(WeightGrp_array[RigSet].rigInfOffset, 0)
+                    print(PolyGrp_array[p].visGroupName + " Rig info start: " + str(f.tell()))
+
+                    if (WeightGrp_array[RigSet].rigInfCount != 0):
+                        for x in range(WeightGrp_array[RigSet].rigInfCount):
+                            RigBoneNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+                            RigBuffStart = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+                            RigBuffSize = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
+                            RigRet = f.tell()
+                            f.seek(RigBoneNameOffset, 0)
+                            RigBoneName = readVarLenString(f)
+                            f.seek(RigBuffStart, 0)
+                            RigBoneID = 0
+                            for b in range(len(BoneArray)):
+                                if (RigBoneName == BoneArray[b].name):
+                                    RigBoneID = b
+
+                            if (RigBoneID == 0):
+                                print(RigBoneName + " doesn't exist on " + PolyGrp_array[p].visGroupName + "! Transferring rigging to " + BoneArray[1].name + ".")
+                                RigBoneID = 1
+
+                            for y in range(int(RigBuffSize / 0x06)):
+                                RigVertID = struct.unpack('<H', f.read(2))[0]
+                                RigValue = struct.unpack('<f', f.read(4))[0]
+                                Weight_array[RigVertID].boneIDs.append(RigBoneID)
+                                Weight_array[RigVertID].weights.append(RigValue)
+
+                            f.seek(RigRet, 0)
+
+                    else:
+                        print(PolyGrp_array[p].visGroupName + " has no influences! Treating as a root singlebind instead.")
+                        Weight_array = []
+                        for b in range(len(Vert_array)):
+                            Weight_array.append(weight_data([1], [1.0]))
+
+                    print(Weight_array)
 
                 # Finally add the meshes into Blender
                 mesh =  bpy.data.meshes.new(PolyGrp_array[p].visGroupName)
                 obj = bpy.data.objects.new(PolyGrp_array[p].visGroupName, mesh)
+                obj.parent = bpy.data.objects[skelName]
+
                 try:
                     if (len(MODLGrp_array[PolyGrp_array[p].visGroupName]) > 63):
                         mesh.materials.append(bpy.data.materials[MODLGrp_array[PolyGrp_array[p].visGroupName][:63]])
@@ -775,67 +780,33 @@ def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_c
                     # In case material cannot be found
                     continue
                 mesh.use_auto_smooth = True
-#                mesh.parent = bpy.data.objects[skelName]
-#                
-#                for bone in bpy.data.armatures[skelName].bones.values():
-#                    mesh.vertex_groups.new(bone.name)
-#                modifier = mesh.modifiers.new(skelName, type="ARMATURE")
-#                modifier.object = skelName
+                
+                for bone in bpy.data.armatures[skelName].bones.values():
+                    obj.vertex_groups.new(bone.name)
+                modifier = obj.modifiers.new(skelName, type="ARMATURE")
+                modifier.object = bpy.data.objects[skelName]
 
                 bm = bmesh.new()
                 bm.from_mesh(mesh)
+
+                if (PolyGrp_array[p].singleBindName != ""):
+                        SingleBindID = 1
+                        for b in range(len(BoneName_array)):
+                            if (PolyGrp_array[p].singleBindName == BoneName_array[b]):
+                                SingleBindID = b
+                                break
+                        mesh.transform(BoneTrsArray[SingleBindID], shape_keys=False)
+
+                weight_layer = bm.verts.layers.deform.new()
                 
-#                if (PolyGrp_array[p].singleBindName != ""):
-#                        SingleBindID = 1
-#                        for b in range(len(BoneName_array)):
-#                            if (PolyGrp_array[p].singleBindName == BoneName_array[b]):
-#                                SingleBindID = b
-#                                break
-#                        mesh.transform(BoneTrsArray[SingleBindID], shape_keys=False)
-#                
-#                if (BoneCount > 0):
-#                    boneIDMap = []
-#                    
-#                    for i in range(len(BoneCount)):
-#                        # maxbone = getnodebyname BoneArray[i].name
-#                        if (i != BoneCount):
-#                            pass# skinOps.addBone skinMod maxbone 0
-#                        else:
-#                            pass# skinOps.addBone skinMod maxbone 1
-#                    
-#                    # local numSkinBones = skinOps.GetNumberBones skinMod
-#                    for bone in bpy.data.armatures[skelName].bones.values():
-#                    # for i in range(len(numSkinBones)):
-#                        # local boneName = skinOps.GetBoneName skinMod i 0
-#                        for j in range(len(BoneCount)):
-#                            if (bone.name == BoneArray[j].name):
-#                                boneIDMap[j] = i
-#                                j = BoneCount + 1
-#                    
-#                    # These fix broken rigging for 3DS Max 2015 and above.
-#                    for i in range(len(Vert_array)):
-#                        skinOps.SetVertexWeights skinMod i 1 1
-#                        skinOps.unnormalizeVertex skinMod i true 
-#                        skinOps.SetVertexWeights skinMod i 1 0
-#                        skinOps.unnormalizeVertex skinMod i false
-#                    )
-#                
-#                weight_layer = bm.verts.layers.deform.new()
                 for vert in range(len(Vert_array)):
+                    vertIndex = Vert_array.index(Vert_array[vert])
                     bmv = bm.verts.new(Vert_array[vert])
                     bmv.normal = Normal_array[vert]
 
-#                    for w in Weight_array:
-#                        bi = [] # bone index array
-#                        wv = [] # weight value array
-#
-#                        for j in range(len(w.boneIDs)):
-#                            boneid = w.boneIDs[j]
-#                            weight = w.weights[j]
-#                            bi.append(boneIDMap[boneid])
-#                            wv.append(weight)
-#
-#                        bmv[weight_layer][bi] = wv
+                    for j in range(len(Weight_array[vertIndex].boneIDs)):
+                        bmv[weight_layer][Weight_array[vertIndex].boneIDs[j]] =  Weight_array[vertIndex].weights[j]
+
                 # Required after adding / removing vertices and before accessing them
                 # by index.
                 bm.verts.ensure_lookup_table()
@@ -885,11 +856,11 @@ def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_c
                             if (len(UV_array) > 0):
                                 pass
                                 #print(type(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext))
-                                #face[tex_layer].image = findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext
+                                #face[tex_layer].image = bpy.data.images[findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext]
                             if (len(UV2_array) > 0):
                                 pass
                                 #print((findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext))
-                                #face[tex_layer_2].image = findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext
+                                #face[tex_layer_2].image = bpy.data.images[findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext]
                             """ Images can currently be linked only with the first 2 UV maps
                             if (len(UV3_array) > 0):
                                 face[tex_layer_3].image = 
@@ -937,7 +908,7 @@ def importMeshes(context, MSHName, texture_ext=".png", up_axis='Y', use_vertex_c
                 bpy.context.scene.objects.active = obj
                 bpy.ops.object.shade_smooth()
 
-        print("Done! Mesh import completed in " + str(round(time.time() - time_start)) + " seconds.")
+        print("Done! Mesh import completed in " + str(round(time.time() - time_start, 3)) + " seconds.")
 
 # ==== Import OPERATOR ====
 from bpy_extras.io_utils import (ImportHelper)
