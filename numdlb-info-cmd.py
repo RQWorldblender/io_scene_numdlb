@@ -496,6 +496,7 @@ def importMeshes(MSHName):
 
                 if print_debug_info:
                     print(PolyGrp_array[p].visGroupName + " Vert start: " + str(f.tell()))
+                print("PosFmt: " + str(PosFmt) + " | NormFmt: " + str(NormFmt) + " | TanFmt: " + str(TanFmt))
                 for v in range(PolyGrp_array[p].verticeCount):
                     if (PosFmt == 1):
                         vx = struct.unpack('<f', f.read(4))[0]
@@ -505,18 +506,18 @@ def importMeshes(MSHName):
                     else:
                         print("Unknown position format!")
                     if (NormFmt == 6):
-                        nx = decompressHalfFloat(f.read(2)) * 2 
-                        ny = decompressHalfFloat(f.read(2)) * 2
-                        nz = decompressHalfFloat(f.read(2)) * 2
-                        nq = decompressHalfFloat(f.read(2)) * 2
+                        nx = decompressHalfFloat(f.read(2))
+                        ny = decompressHalfFloat(f.read(2))
+                        nz = decompressHalfFloat(f.read(2))
+                        nq = decompressHalfFloat(f.read(2))
                         Normal_array.append([nx,ny,nz])
                     else:
                         print("Unknown normals format!")
                     if (TanFmt == 6):
-                        tanx = decompressHalfFloat(f.read(2)) * 2
-                        tany = decompressHalfFloat(f.read(2)) * 2
-                        tanz = decompressHalfFloat(f.read(2)) * 2
-                        tanq = decompressHalfFloat(f.read(2)) * 2
+                        tanx = decompressHalfFloat(f.read(2))
+                        tany = decompressHalfFloat(f.read(2))
+                        tanz = decompressHalfFloat(f.read(2))
+                        tanq = decompressHalfFloat(f.read(2))
                     else:
                         print("Unknown tangents format!")
 
@@ -529,146 +530,67 @@ def importMeshes(MSHName):
                 if print_debug_info:
                     print(PolyGrp_array[p].visGroupName + " UV start: " + str(f.tell()))
                 for v in range(PolyGrp_array[p].verticeCount):
-                    if (UVCount == 0):
-                        UV_array.append([0,0,0])
-                    elif (UVCount == 1):
-                        tu = (decompressHalfFloat(f.read(2)) * 2)
-                        tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        UV_array.append([tu,tv,0])
-                    elif (UVCount == 2):
-                        tu = (decompressHalfFloat(f.read(2)) * 2)
-                        tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu2 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv2 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        UV_array.append([tu,tv,0])
-                        UV2_array.append([tu2,tv2,0])
-                    elif (UVCount == 3):
-                        tu = (decompressHalfFloat(f.read(2)) * 2)
-                        tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu2 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv2 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu3 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv3 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        UV_array.append([tu,tv,0])
-                        UV2_array.append([tu2,tv2,0])
-                        UV3_array.append([tu3,tv3,0])
-                    elif (UVCount == 4):
-                        tu = (decompressHalfFloat(f.read(2)) * 2)
-                        tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu2 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv2 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu3 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv3 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu4 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv4 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        UV_array.append([tu,tv,0])
-                        UV2_array.append([tu2,tv2,0])
-                        UV3_array.append([tu3,tv3,0])
-                        UV4_array.append([tu4,tv4,0])
-                    elif (UVCount == 5):
-                        tu = (decompressHalfFloat(f.read(2)) * 2)
-                        tv = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu2 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv2 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu3 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv3 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu4 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv4 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        tu5 = (decompressHalfFloat(f.read(2)) * 2)
-                        tv5 = ((decompressHalfFloat(f.read(2)) * 2) * -1) + 1
-                        UV_array.append([tu,tv,0])
-                        UV2_array.append([tu2,tv2,0])
-                        UV3_array.append([tu3,tv3,0])
-                        UV4_array.append([tu4,tv4,0])
-                        UV5_array.append([tu5,tv5,0])
+                    if (UVCount >= 1):
+                        tu = decompressHalfFloat(f.read(2))
+                        tv = (decompressHalfFloat(f.read(2)) * -1) + 1
+                        UV_array.append([tu,tv])
+                        if (UVCount >= 2):
+                            tu2 = decompressHalfFloat(f.read(2))
+                            tv2 = (decompressHalfFloat(f.read(2)) * -1) + 1
+                            UV2_array.append([tu2,tv2])
+                            if (UVCount >= 3):
+                                tu3 = decompressHalfFloat(f.read(2))
+                                tv3 = (decompressHalfFloat(f.read(2)) * -1) + 1
+                                UV3_array.append([tu3,tv3])
+                                if (UVCount >= 4):
+                                    tu4 = decompressHalfFloat(f.read(2))
+                                    tv4 = (decompressHalfFloat(f.read(2)) * -1) + 1
+                                    UV4_array.append([tu4,tv4])
+                                    if (UVCount >= 5):
+                                        tu5 = decompressHalfFloat(f.read(2))
+                                        tv5 = (decompressHalfFloat(f.read(2)) * -1) + 1
+                                        UV5_array.append([tu5,tv5])
+                                    if (UVCount >= 6):
+                                        print("Importing more than 5 UV sets is not supported, not reading any more.")
                     else:
-                        print("Importing more than 5 UV sets is not supported, skipping this set.")
+                        UV_array.append([0,0])
+                    
                     # Read vertex color data
-                    if (ColorCount == 0):
-                        Color_array.append([128,128,128])
-                        Alpha_array.append(1)
-                    elif (ColorCount == 1):
-                        colorr = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb = struct.unpack('<B', f.read(1))[0] #unsigned
+                    if (ColorCount >= 1):
+                        colorr = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                        colorg = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                        colorb = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
                         colora = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
                         Color_array.append([colorr,colorg,colorb]); Alpha_array.append(colora)
-                    elif (ColorCount == 2):
-                        colorr = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        colorr2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        Color_array.append([colorr,colorg,colorb]); Alpha_array.append(colora)
-                        Color2_array.append([colorr2,colorg2,colorb2]); Alpha2_array.append(colora2)
-                    elif (ColorCount == 3):
-                        colorr = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        colorr2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        colorr3 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg3 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb3 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        Color_array.append([colorr,colorg,colorb]); Alpha_array.append(colora)
-                        Color2_array.append([colorr2,colorg2,colorb2]); Alpha2_array.append(colora2)
-                        Color3_array.append([colorr3,colorg3,colorb3]); Alpha3_array.append(colora3)
-                    elif (ColorCount == 4):
-                        colorr = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        colorr2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        colorr3 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg3 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb3 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        colorr4 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg4 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb4 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora4 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        Color_array.append([colorr,colorg,colorb]); Alpha_array.append(colora)
-                        Color2_array.append([colorr2,colorg2,colorb2]); Alpha2_array.append(colora2)
-                        Color3_array.append([colorr3,colorg3,colorb3]); Alpha3_array.append(colora3)
-                        Color4_array.append([colorr4,colorg4,colorb4]); Alpha4_array.append(colora4)
-                    elif (ColorCount == 5):
-                        colorr = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        colorr2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        colorr3 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg3 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb3 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        colorr4 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg4 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb4 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora4 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        colorr5 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorg5 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colorb5 = struct.unpack('<B', f.read(1))[0] #unsigned
-                        colora5 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
-                        Color_array.append([colorr,colorg,colorb]); Alpha_array.append(colora)
-                        Color2_array.append([colorr2,colorg2,colorb2]); Alpha2_array.append(colora2)
-                        Color3_array.append([colorr3,colorg3,colorb3]); Alpha3_array.append(colora3)
-                        Color4_array.append([colorr4,colorg4,colorb4]); Alpha4_array.append(colora4)
-                        Color5_array.append([colorr5,colorg5,colorb5]); Alpha5_array.append(colora5)
+                        if (ColorCount >= 2):
+                            colorr2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                            colorg2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                            colorb2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                            colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                            Color2_array.append([colorr2,colorg2,colorb2]); Alpha2_array.append(colora2)
+                            if (ColorCount >= 3):
+                                colorr3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                                colorg3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                                colorb3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                                colora3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                Color3_array.append([colorr3,colorg3,colorb3]); Alpha3_array.append(colora3)
+                                if (ColorCount >= 4):
+                                    colorr4 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                                    colorg4 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                                    colorb4 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                                    colora4 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                    Color4_array.append([colorr4,colorg4,colorb4]); Alpha4_array.append(colora4)
+                                    if (ColorCount >= 5):
+                                        colorr5 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                                        colorg5 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                                        colorb5 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
+                                        colora5 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                        Color5_array.append([colorr5,colorg5,colorb5]); Alpha5_array.append(colora5)
+                                        if (ColorCount >= 6):
+                                            print("Importing more than 5 vertex color sets is not supported, not reading any more.")
                     else:
-                        print("Importing more than 5 vertex color sets is not supported, skipping this set.")
+                        Color_array.append([1.0,1.0,1.0])
+                        Alpha_array.append(1.0)
 
                 if print_debug_info:
                     print(PolyGrp_array[p].visGroupName + " UV end: " + str(f.tell()))
@@ -693,7 +615,6 @@ def importMeshes(MSHName):
 
                 if print_debug_info:
                     print(PolyGrp_array[p].visGroupName + " Face end: " + str(f.tell()))
-                    #print(Face_array)
 
                 if (PolyGrp_array[p].singleBindName != ""):
                     for b in range(len(BoneArray)):
@@ -749,15 +670,14 @@ def importMeshes(MSHName):
                         for b in range(len(Vert_array)):
                             Weight_array.append(weight_data([1], [1.0]))
 
-                    print(Weight_array)
-
                 #print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
                 #print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
 
-        print("Done! Mesh import completed in " + str((time.time()-time_start)) + " seconds.")
+        print("Done! Mesh import completed in " + str(round(time.time() - time_start)) + " seconds.")
 
 #modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/body/c00/model.numdlb"
-modelpath = "/media/richard/3AEE25744CE0956E/Smash Ultimate Models/fighter/mario/model/body/c00/model.numdlb"
+#modelpath = "/media/richard/3AEE25744CE0956E/Smash Ultimate Models/fighter/mario/model/body/c00/model.numdlb"
+modelpath = "/opt/Smash Ultimate Models/fighter/pikachu/model/body/c00/model.numdlb"
 getModelInfo(modelpath)
 
 #importMaterials(MATName)
