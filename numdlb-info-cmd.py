@@ -35,20 +35,7 @@ def decompressHalfFloat(bytes):
         e = e + (127 -15)
         f = f << 13
         return reinterpretCastIntToFloat(int((s << 31) | (e << 23) | f))
-"""
-class MODLStruct:
-    # struct MODLStruct (MSHGrpName, MSHMatName)
-    def __init__(self):
-        self.meshGroupName = ""
-        self.meshMaterialName = ""
 
-    def __init__(self, meshGroupName, meshMaterialName):
-        self.meshGroupName = meshGroupName
-        self.meshMaterialName = meshMaterialName
-
-    def __repr__(self):
-        return "Mesh group name: " + str(self.meshGroupName) + "\t| Mesh material name: " + str(self.meshMaterialName) + "\n"
-"""
 class MatStruct:
     # struct MatStruct (MatName, MatColName, MatCol2Name, MatBakeName, MatNorName, MatEmiName, atEmi2Name, MatPrmName, MatEnvName)
     def __init__(self):
