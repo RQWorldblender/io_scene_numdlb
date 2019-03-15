@@ -37,7 +37,6 @@ def decompressHalfFloat(bytes):
         return reinterpretCastIntToFloat(int((s << 31) | (e << 23) | f))
 
 class MatStruct:
-    # struct MatStruct (MatName, MatColName, MatCol2Name, MatBakeName, MatNorName, MatEmiName, atEmi2Name, MatPrmName, MatEnvName)
     def __init__(self):
         self.materialName = ""
         self.color1Name = ""
@@ -53,7 +52,6 @@ class MatStruct:
         return "Material name: " + str(self.materialName) + "\t| Color 1 name: " + str(self.color1Name) + "\t| Color 2 name: " + str(self.color2Name) + "\t| Bake name: " + str(self.bakeName) + "\t| Normal name: " + str(self.normalName) + "\t| Emissive 1 name: " + str(self.emissive1Name) + "\t| Emissive 2 name: " + str(self.emissive2Name) + "\t| PRM name: " + str(self.prmName) + "\t| Env name: " + str(self.envName) + "\n"
 
 class weight_data:
-    # struct weight_data (boneids, weights)
     def __init__(self):
         self.boneIDs = []
         self.weights = []
@@ -66,7 +64,6 @@ class weight_data:
         return "Bone IDs: " + str(self.boneIDs) + "\t| Weights: " + str(self.weights) + "\n"
 
 class PolyGrpStruct:
-    # struct PolyGrpStruct (VisGrpName, SingleBindName, FacepointCount, FacepointStart, FaceLongBit, VertCount, VertStart, VertStride, UVStart, UVStride, BuffParamStart, BuffParamCount)
     def __init__(self):
         self.visGroupName = ""
         self.singleBindName = ""
@@ -85,7 +82,6 @@ class PolyGrpStruct:
         return "Vis group name: " + str(self.visGroupName) + "\t| Single bind name: " + str(self.singleBindName) + "\t| Facepoint count: " + str(self.facepointCount) + "\t| Facepoint start: " + str(self.facepointStart) + "\t| Face long bit: " + str(self.faceLongBit) + "\t| Vertice count: " + str(self.verticeCount) + "\t| Vertice start " + str(self.verticeStart) + "\t| Vertice stride: " + str(self.verticeStride) + "\t| UV start: " + str(self.UVStart) + "\t| UV stride: " + str(self.UVStride) + "\t| Buffer parameter start: " + str(self.bufferParamStart) + "\t| Buffer parameter count: " + str(self.bufferParamCount) + "\n"
 
 class WeightGrpStruct:
-    #struct WeightGrpStruct (GrpName, SubGroupNum, WeightInfMax, WeightFlag2, WeightFlag3, WeightFlag4, RigInfOffset, RigInfCount)
     def __init__(self):
         self.groupName = ""
         self.subGroupNum = 0
@@ -110,7 +106,7 @@ Materials_array = []
 BoneCount = 0
 BoneArray = ["Trans", "Rot"]
 BoneFixArray = []
-BoneTrsArray = []
+BoneTrsArray = {}
 BoneParent_array = []
 BoneName_array = []
 PolyGrp_array = []
@@ -129,8 +125,8 @@ def findUVImageForMesh(matNameQuery, useUVMap2):
 
 def readVarLenString(file):
     nameBuffer = []
-    while('\\' not in nameBuffer):
-        nameBuffer.append(str(file.read(1))[2:3])
+    while('\x00' not in nameBuffer):
+        nameBuffer.append(str(file.read(1).decode("utf-8", "ignore")))
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
@@ -145,8 +141,8 @@ def getModelInfo(filepath):
             # Reads the model file to find information about the other files
             MODLCheck = struct.unpack('<L', md.read(4))[0]
             if (MODLCheck == 0x4D4F444C):
-                MODLVerA = struct.unpack('<H', md.read(2))[0] #unsigned
-                MODLVerB = struct.unpack('<H', md.read(2))[0] #unsigned
+                MODLVerA = struct.unpack('<H', md.read(2))[0]
+                MODLVerB = struct.unpack('<H', md.read(2))[0]
                 MODLNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
                 SKTNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
                 MATNameOff = md.tell() + struct.unpack('<L', md.read(4))[0]; md.seek(0x04, 1)
@@ -201,8 +197,8 @@ def importMaterials(MATName):
         mt.seek(0x10, 0)
         MATCheck = struct.unpack('<L', mt.read(4))[0]
         if (MATCheck == 0x4D41544C):
-            MATVerA = struct.unpack('<H', mt.read(2))[0] #unsigned
-            MATVerB = struct.unpack('<H', mt.read(2))[0] #unsigned
+            MATVerA = struct.unpack('<H', mt.read(2))[0]
+            MATVerB = struct.unpack('<H', mt.read(2))[0]
             MATHeadOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
             MATCount = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
             mt.seek(MATHeadOff, 0)
@@ -414,10 +410,10 @@ def importMeshes(MSHName):
                 be = WeightGrpStruct()
                 GrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 be.subGroupNum = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
-                be.weightInfMax = struct.unpack('<B', f.read(1))[0] #unsigned
-                be.weightFlag2 = struct.unpack('<B', f.read(1))[0] #unsigned
-                be.weightFlag3 = struct.unpack('<B', f.read(1))[0] #unsigned
-                be.weightFlag4 = struct.unpack('<B', f.read(1))[0] #unsigned
+                be.weightInfMax = struct.unpack('<B', f.read(1))[0]
+                be.weightFlag2 = struct.unpack('<B', f.read(1))[0]
+                be.weightFlag3 = struct.unpack('<B', f.read(1))[0]
+                be.weightFlag4 = struct.unpack('<B', f.read(1))[0]
                 f.seek(0x04, 1)
                 be.rigInfOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 be.rigInfCount = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
@@ -480,6 +476,7 @@ def importMeshes(MSHName):
                         raise RuntimeError("Unknown format!")
                     f.seek(BuffParamRet, 0)
                 # Read vertice data
+                print("Total number of vertices found: " + str(PolyGrp_array[p].verticeCount))
                 f.seek(VertOffStart + PolyGrp_array[p].verticeStart, 0)
 
                 if print_debug_info:
@@ -511,7 +508,7 @@ def importMeshes(MSHName):
 
                 if print_debug_info:
                     print(PolyGrp_array[p].visGroupName + " Vert end: " + str(f.tell()))
-                    print(len(Vert_array))
+                    # print(Vert_array)
                 # Read UV map data
                 f.seek(UVOffStart + PolyGrp_array[p].UVStart, 0)
 
@@ -545,34 +542,34 @@ def importMeshes(MSHName):
                     
                     # Read vertex color data
                     if (ColorCount >= 1):
-                        colorr = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                        colorg = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                        colorb = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                        colora = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                        colorr = float(struct.unpack('<B', f.read(1))[0]) / 128
+                        colorg = float(struct.unpack('<B', f.read(1))[0]) / 128
+                        colorb = float(struct.unpack('<B', f.read(1))[0]) / 128
+                        colora = float(struct.unpack('<B', f.read(1))[0]) / 128
                         Color_array.append([colorr,colorg,colorb]); Alpha_array.append(colora)
                         if (ColorCount >= 2):
-                            colorr2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                            colorg2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                            colorb2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                            colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                            colorr2 = float(struct.unpack('<B', f.read(1))[0]) / 128
+                            colorg2 = float(struct.unpack('<B', f.read(1))[0]) / 128
+                            colorb2 = float(struct.unpack('<B', f.read(1))[0]) / 128
+                            colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128
                             Color2_array.append([colorr2,colorg2,colorb2]); Alpha2_array.append(colora2)
                             if (ColorCount >= 3):
-                                colorr3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                                colorg3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                                colorb3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                                colora3 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                colorr3 = float(struct.unpack('<B', f.read(1))[0]) / 128
+                                colorg3 = float(struct.unpack('<B', f.read(1))[0]) / 128
+                                colorb3 = float(struct.unpack('<B', f.read(1))[0]) / 128
+                                colora3 = float(struct.unpack('<B', f.read(1))[0]) / 128
                                 Color3_array.append([colorr3,colorg3,colorb3]); Alpha3_array.append(colora3)
                                 if (ColorCount >= 4):
-                                    colorr4 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                                    colorg4 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                                    colorb4 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                                    colora4 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                    colorr4 = float(struct.unpack('<B', f.read(1))[0]) / 128
+                                    colorg4 = float(struct.unpack('<B', f.read(1))[0]) / 128
+                                    colorb4 = float(struct.unpack('<B', f.read(1))[0]) / 128
+                                    colora4 = float(struct.unpack('<B', f.read(1))[0]) / 128
                                     Color4_array.append([colorr4,colorg4,colorb4]); Alpha4_array.append(colora4)
                                     if (ColorCount >= 5):
-                                        colorr5 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                                        colorg5 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                                        colorb5 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned
-                                        colora5 = float(struct.unpack('<B', f.read(1))[0]) / 128 #unsigned as float) / 128
+                                        colorr5 = float(struct.unpack('<B', f.read(1))[0]) / 128
+                                        colorg5 = float(struct.unpack('<B', f.read(1))[0]) / 128
+                                        colorb5 = float(struct.unpack('<B', f.read(1))[0]) / 128
+                                        colora5 = float(struct.unpack('<B', f.read(1))[0]) / 128
                                         Color5_array.append([colorr5,colorg5,colorb5]); Alpha5_array.append(colora5)
                                         if (ColorCount >= 6):
                                             print("Importing more than 5 vertex color sets is not supported, not reading any more.")
@@ -588,15 +585,15 @@ def importMeshes(MSHName):
                     print(PolyGrp_array[p].visGroupName + " Face start: " + str(f.tell()))
                 for fc in range(int(PolyGrp_array[p].facepointCount / 3)):
                     if (PolyGrp_array[p].faceLongBit == 0):
-                        fa = struct.unpack('<H', f.read(2))[0] + 1 #unsigned + 1
-                        fb = struct.unpack('<H', f.read(2))[0] + 1 #unsigned + 1
-                        fc = struct.unpack('<H', f.read(2))[0] + 1 #unsigned + 1
+                        fa = struct.unpack('<H', f.read(2))[0] + 1
+                        fb = struct.unpack('<H', f.read(2))[0] + 1
+                        fc = struct.unpack('<H', f.read(2))[0] + 1
                         Face_array.append([fa,fb,fc])
 
                     elif (PolyGrp_array[p].faceLongBit == 1):
-                        fa = struct.unpack('<L', f.read(4))[0] + 1 #unsigned + 1
-                        fb = struct.unpack('<L', f.read(4))[0] + 1 #unsigned + 1
-                        fc = struct.unpack('<L', f.read(4))[0] + 1 #unsigned + 1
+                        fa = struct.unpack('<L', f.read(4))[0] + 1
+                        fb = struct.unpack('<L', f.read(4))[0] + 1
+                        fc = struct.unpack('<L', f.read(4))[0] + 1
                         Face_array.append([fa,fb,fc])
                     else:
                         raise RuntimeError("Unknown face bit value!")
@@ -658,7 +655,7 @@ def importMeshes(MSHName):
                         for b in range(len(Vert_array)):
                             Weight_array.append(weight_data([1], [1.0]))
 
-                print(len(Weight_array))
+                print(Weight_array)
                 #print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
                 #print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
 
@@ -669,6 +666,6 @@ def importMeshes(MSHName):
 modelpath = "/opt/Smash Ultimate Models/fighter/packun/model/body/c00/model.numdlb"
 getModelInfo(modelpath)
 
-#importMaterials(MATName)
+importMaterials(MATName)
 importSkeleton(SKTName)
 importMeshes(MSHName)
