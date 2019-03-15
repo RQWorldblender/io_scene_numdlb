@@ -21,6 +21,11 @@ This set of two scripts requires Blender 2.70 or later, but only 2.79 has been t
 3. Disable the plugin by clicking the checkbox next to the plugin name - or uninstall the plugin by clicking `Remove`.
 4. Select `Save User Settings` in the lower left and close the window.
 
+## Importing NUMDLB or NUANMB data
+1. Navigate to `File -> Import -> NUMDLB` or `File -> Import -> NUANMB` and select the file(s) you wish to import. One at a time for NUMDLB files, and multiple at a time for NUANMB animation files.
+2. Only if importing NUANMB files, select the armature (skeleton) for the target model before importing them.
+3. Select `NUMDLB Import` or `NUANMB Import`, depending on what was selected earlier.
+
 ## Credits
 * The NUMDLB importer uses helper functions from the SuperTuxKart SPM importer at <https://sourceforge.net/p/supertuxkart/code/HEAD/tree/media/trunk/blender_26/spm_import.py>.
 * Parts of the Python scripts reference snippets of code from <http://steamreview.org/BlenderSourceTools/>.
