@@ -65,38 +65,34 @@ def decompressHalfFloat(bytes):
         f = f << 13
         return reinterpretCastIntToFloat(int((s << 31) | (e << 23) | f))
 
-def findUVImageForMesh(matNameQuery, useUVMap2):
-    for mat in Materials_array:
-        if (mat.materialName == matNameQuery):
-            if useUVMap2:
-                return mat.color2Name
-            else:
-                return mat.color1Name
-    return ""
-
 def readVarLenString(file):
     nameBuffer = []
-    while('\\' not in nameBuffer):
-        nameBuffer.append(str(file.read(1))[2:3])
+    while('\x00' not in nameBuffer):
+        nameBuffer.append(str(file.read(1).decode("utf-8", "ignore")))
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
-def importAnimations(context, filepath, up_axis='Y', auto_rotate=False):
-    global AnimName; animName = ""
-    global BoneCount; BoneCount = 0
-    global BoneArray; BoneArray = []
-    global Animations_Array; Animations_Array = []
-    global BoneTrsArray; BoneTrsArray = []
+def importAnimations(context, filepath, import_method="create_new", auto_rotate=False):
+    AnimName = ""
+    FrameCount = 0
+    BoneCount = 0
+    BoneArray = []
+    Animations_Array = []
+    BoneTrsArray; BoneTrsArray = []
     
     if os.path.isfile(filepath):
         with open(filepath, 'rb') as am:
             am.seek(0x10, 0)
             AnimCheck = struct.unpack('<L', am.read(4))[0]
             if (AnimCheck == 0x414E494D):
-                am.seek(0x1C, 0)
                 AnimVerA = struct.unpack('<H', am.read(2))[0]
                 AnimVerB = struct.unpack('<H', am.read(2))[0]
-                am.seek(0x48, 0)
+                FrameCount = struct.unpack('<f', am.read(4))[0]
+                Unk1 = struct.unpack('<H', am.read(2))[0]
+                Unk2 = struct.unpack('<H', am.read(2))[0]
+                AnimNameOff = am.tell() + struct.unpack('<L', am.read(4))[0]
+                
+                am.seek(AnimNameOff, 0)
                 AnimName = readVarLenString(am); am.seek(0x04, 1)
                 """
                 BoneMatrOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
@@ -147,12 +143,12 @@ class NUANMB_Import_Operator(bpy.types.Operator, ImportHelper):
     filename_ext = ".nuanmb"
     filter_glob = bpy.props.StringProperty(default="*.nuanmb", options={'HIDDEN'})
     
-    up_axis = bpy.props.EnumProperty(
-            name="Up Axis",
-            description="The axis all objects will point upwards with",
-            items=(('Y', "Y", "Objects will appear sideways front and back"),
-                   ('Z', "Z", "Objects will appear upright")),
-            default='Y',
+    import_method = bpy.props.EnumProperty(
+            name="Import Method",
+            description="How to import animations (when multiple are simulataneously imported",
+            items=(("create_new", "Create new actions", "Animations will be imported as their own actions"),
+                   ("append_existing", "Append to current", "Animations will be imported to the current action")),
+            default="create_new",
             )
 
     auto_rotate = bpy.props.BoolProperty(
