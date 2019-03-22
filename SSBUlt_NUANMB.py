@@ -65,6 +65,20 @@ def decompressHalfFloat(bytes):
         f = f << 13
         return reinterpretCastIntToFloat(int((s << 31) | (e << 23) | f))
 
+class AnimTrack:
+    def __init__(self):
+        self.name = ""
+        self.type = 0
+        self.flags = 0
+        self.frameCount = 0
+        self.transMatrix = []
+        self.visibMatrix = []
+        self.materMatrix = []
+        self.camerMatrix = []
+
+    def __repr__(self):
+        return "Node name: " + str(self.name) + "\t| Type: " + AnimType[self.type] + "\t| Flags: " + str(self.flags) + "\t| # of frames: " + str(self.frameCount) + "\n"
+
 def readVarLenString(file):
     nameBuffer = []
     while('\x00' not in nameBuffer):
@@ -72,13 +86,20 @@ def readVarLenString(file):
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
-def importAnimations(context, filepath, import_method="create_new", auto_rotate=False):
-    AnimName = ""
-    FrameCount = 0
-    BoneCount = 0
-    BoneArray = []
-    Animations_Array = []
-    BoneTrsArray; BoneTrsArray = []
+AnimType = {1: "Transform", 2: "Visibility", 4: "Material", 5: "Camera"}
+AnimTrackFlags = {1: "Transform", 2: "Texture", 3: "Float", 5: "PatternIndex", 8: "Boolean", 9: "Vector4",
+                256: "Direct", 512: "ConstTramsform", 1024: "Compressed", 1280: "Constant"}
+# Use 65280 or 0xff00 when performing a bitwise 'and' on a flag, if the header is not compressed
+# Use 255 or 0x00ff when performing a bitwise 'and' on a flag, if the header is compressed
+
+def getAnimationInfo(context, filepath, import_method="create_new", auto_rotate=False):
+    # Semi-global variables used by this function's hierarchy; cleared every time this function runs
+    global AnimName; AnimName = ""
+    GroupCount = 0
+    global FrameCount; FrameCount = 0
+    NodeCount = 0
+    global AnimGroups; AnimGroups = {}
+    # Structure of this dict is: {AnimType (numeric): an array of AnimTrack objects}
     
     if os.path.isfile(filepath):
         with open(filepath, 'rb') as am:
@@ -88,41 +109,67 @@ def importAnimations(context, filepath, import_method="create_new", auto_rotate=
                 AnimVerA = struct.unpack('<H', am.read(2))[0]
                 AnimVerB = struct.unpack('<H', am.read(2))[0]
                 FrameCount = struct.unpack('<f', am.read(4))[0]
+                print("Total # of frames: " + str(FrameCount))
                 Unk1 = struct.unpack('<H', am.read(2))[0]
                 Unk2 = struct.unpack('<H', am.read(2))[0]
-                AnimNameOff = am.tell() + struct.unpack('<L', am.read(4))[0]
-                
-                am.seek(AnimNameOff, 0)
+                AnimNameOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                GroupOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                GroupCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                Buffer1 = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                Buffer2 = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                #print("GroupOffset: " + str(GroupOffset) + " | " + "GroupCount: " + str(GroupCount) + " | " + "Buffer1: " + str(Buffer1) + " | " + "Buffer2: " + str(Buffer2))
+                am.seek(AnimNameOffset, 0)
                 AnimName = readVarLenString(am); am.seek(0x04, 1)
-                """
-                BoneMatrOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                BoneMatrCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                BoneInvMatrOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                BoneInvMatrCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                BoneRelMatrOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                BoneRelMatrCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                BoneRelMatrInvOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                BoneRelMatrInvCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                Unk1 = 0
-                Unk2 = 0
-                am.seek(BoneOffset, 0)
-
-                for c in range(BoneCount):
-                    BoneNameOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                    BoneRet = am.tell()
-                    am.seek(BoneNameOffset, 0)
-                    BoneName = readVarLenString(b)
-                    am.seek(BoneRet, 0)
-                    BoneID = struct.unpack('<H', am.read(2))[0]
-                    BoneParent = struct.unpack('<H', am.read(2))[0]
-                    BoneUnk = struct.unpack('<L', am.read(4))[0]
-                    BoneParent_array.append(BoneParent)
-                    BoneName_array.append(BoneName)
-
-                print("Total number of bones found: " + str(BoneCount))
-                print(BoneParent_array)
-                print(BoneName_array)
-                """
+                print("AnimName: " + AnimName)
+                am.seek(GroupOffset, 0)
+                # Collect information about the nodes
+                for g in range(GroupCount):
+                    NodeAnimType = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                    NodeOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                    NodeCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                    AnimGroups[NodeAnimType] = [] # Create empty array to append to later on
+                    NextGroupPos = am.tell()
+                    #print("AnimType: " + AnimType[NodeAnimType] + " | " + "NodeOffset: " + str(NodeOffset) + " | " + "NodeCount: " + str(NodeCount) + " | NextGroupPos: " + str(NextGroupPos))
+                    am.seek(NodeOffset, 0)
+                    for n in range(NodeCount):
+                        NodeNameOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                        NodeDataOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                        NextNodePos = am.tell() + struct.unpack('<L', am.read(4))[0] + 0x07
+                        #print("NodeNameOffset: " + str(NodeNameOffset) + " | " + "NodeDataOffset: " + str(NodeDataOffset) + " | " + "NextNodePos: " + str(NextNodePos))
+                        am.seek(NodeNameOffset, 0)
+                        at = AnimTrack()
+                        at.type = NodeAnimType
+                        NodeName = readVarLenString(am)
+                        at.name = NodeName
+                        am.seek(NodeDataOffset + 0x08, 0)
+                        TrackFlags = struct.unpack('<L', am.read(4))[0]
+                        at.flags = TrackFlags
+                        TrackFrameCount = struct.unpack('<L', am.read(4))[0]
+                        at.frameCount = TrackFrameCount
+                        Unk3_0 = struct.unpack('<L', am.read(4))[0]
+                        TrackDataOffset = struct.unpack('<L', am.read(4))[0]
+                        TrackDataSize = struct.unpack('<L', am.read(4))[0]
+                        AnimGroups[NodeAnimType].append(at)
+                        #print("NodeName: " + str(NodeName) + " | " + "TrackFlags: " + str(TrackFlags) + " | " + "TrackFrameCount: " + str(TrackFrameCount) + " | " + "Unk3: " + str(Unk3_0) + " | " + "TrackDataOffset: " + str(TrackDataOffset) +" | " + "TrackDataSize: " + str(TrackDataSize))
+                        # Collect the actual data pertaining to every node
+                        """
+                        for c in range(BoneCount):
+                            BoneNameOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                            BoneRet = am.tell()
+                            am.seek(BoneNameOffset, 0)
+                            BoneName = readVarLenString(b)
+                            am.seek(BoneRet, 0)
+                            BoneID = struct.unpack('<H', am.read(2))[0]
+                            BoneParent = struct.unpack('<H', am.read(2))[0]
+                            BoneUnk = struct.unpack('<L', am.read(4))[0]
+                            BoneParent_array.append(BoneParent)
+                            BoneName_array.append(BoneName)
+                        """
+                        am.seek(NextNodePos, 0)
+                    #print("---------")
+                    am.seek(NextGroupPos, 0)
+                print(AnimGroups)
+                # importAnimations(context, import_method, auto_rotate)
             else:
                 raise RuntimeError("%s is not a valid NUANMB file." % filepath)
         
@@ -132,6 +179,9 @@ def importAnimations(context, filepath, import_method="create_new", auto_rotate=
 #            bpy.ops.object.select_pattern(pattern="*Armature*")
 #            bpy.ops.transform.rotate(value=math.radians(90), axis=(1, 0, 0), constraint_axis=(True, False, False), constraint_orientation='GLOBAL', mirror=False, proportional='DISABLED', proportional_edit_falloff='SMOOTH', proportional_size=1)
 #            bpy.ops.object.select_all(action='TOGGLE')
+
+def importAnimations(context, import_method="create_new", auto_rotate=False):
+    pass # This function deals with all of the Blender-specific operations
 
 # ==== Import OPERATOR ====
 from bpy_extras.io_utils import (ImportHelper)
@@ -159,7 +209,7 @@ class NUANMB_Import_Operator(bpy.types.Operator, ImportHelper):
 
     def execute(self, context):
         keywords = self.as_keywords(ignore=("filter_glob", "auto_rotate"))
-        importAnimations(context, **keywords)
+        getAnimationInfo(context, **keywords)
 
         context.scene.update()
         return {"FINISHED"}
