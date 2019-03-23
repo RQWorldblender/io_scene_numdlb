@@ -1,11 +1,16 @@
 # Super Smash Bros. Ultimate model and animation importers for Blender (io_scene_numdlb)
-Imports data referenced by NUMDLB files (binary model format used by some games developed by Bandai-Namco). May work for other games using the same format. Unlike the original MAXScript, this plugin is cross-platform, as it will work on any operating system that Blender and Python exist for. The readability in the rewritten script is also improved, with the main function split into several smaller ones. An importer for animation file (.nuanmb) can be found here, but it cannot actually import anything for now.
+Imports data referenced by NUMDLB files and NUANMB files (binary model and animation formats used by some games developed by Bandai-Namco). May work for other games using the same format. Unlike the original MAXScript, this plugin is cross-platform, as it will work on any operating system that Blender and Python exist for. The readability in the rewritten script is also improved, with the main function split into several smaller ones.
 
-**This script is now ready for daily use. However, there are a few limitations in the script:**
+**The model importer script is now ready for daily use, but the animation importer script is not yet (it can read some data, but not actually import it). There are a few limitations in the model importer script:**
 
 * Vertex colors are set, but the alpha channel is not used, as there is no way to set it within the Blender UI.
 * UV maps will import, but without images assigned to them. They must be assigned manually; use the material and texture information for hints on the images to assign to each mesh.
 * Bone roll is not calculated, so animations imported from files may cause meshes to deform incorrectly, although I'm working on a NUANMB importer in hopes of solving this problem.
+
+## Where to obtain assets
+* Project thread: <https://www.vg-resource.com/thread-34836.html>
+* Direct folder (MEGA.nz): <https://mega.nz/#F!AAwWzCjT!Zd5kKpuQcE647DSRtpFShw>
+* Direct folder (Google Drive): <https://drive.google.com/open?id=1QucKyF_4IMFvZNZe4mMEiUXiAH5tpTIc>
 
 ## Installation
 This set of two scripts requires Blender 2.70 or later, but only 2.79 has been tested.
