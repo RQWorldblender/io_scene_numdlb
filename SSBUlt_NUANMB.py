@@ -15,7 +15,7 @@ __bpydoc__ = """\
 
 bl_info = {
     "name": "Super Smash Bros. Ultimate Animation Importer",
-    "description": "Imports animation data from NUANMB files (binary model format used by some games developed by Bandai-Namco)",
+    "description": "Imports animation data from NUANMB files (binary animation format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Ploaj",
     "version": (0,1),
     "blender": (2, 7, 0),
@@ -26,7 +26,7 @@ bl_info = {
     "tracker_url": "https://gitlab.com/Worldblender/io_scene_numdlb/issues",
     "category": "Import-Export"}
 
-import bmesh, bpy, bpy_extras, mathutils, os, struct, string, sys, time
+import bmesh, bpy, bpy_extras, enum, mathutils, os, struct, string, sys, time
 from progress_report import ProgressReport, ProgressReportSubstep
 
 def reinterpretCastIntToFloat(int_val):
@@ -68,16 +68,38 @@ def decompressHalfFloat(bytes):
 class AnimTrack:
     def __init__(self):
         self.name = ""
-        self.type = 0
+        self.type = ""
         self.flags = 0
         self.frameCount = 0
-        self.transMatrix = []
-        self.visibMatrix = []
-        self.materMatrix = []
-        self.camerMatrix = []
+        self.dataOffset = 0
+        self.dataSize = 0
+        self.transformAnim = []
+        self.visibilityAnim = []
+        self.materialAnim = []
+        self.cameraAnim = []
 
     def __repr__(self):
-        return "Node name: " + str(self.name) + "\t| Type: " + AnimType[self.type] + "\t| Flags: " + str(self.flags) + "\t| # of frames: " + str(self.frameCount) + "\n"
+        return "Node name: " + str(self.name) + "\t| Type: " + str(self.type) + "\t| Flags: " + str(self.flags) + "\t| # of frames: " + str(self.frameCount) + "\t| Data offset: " + str(self.dataOffset) + "\t| Data size: " + str(self.dataSize) + "\n"
+
+class AnimType(enum.Enum):
+    Transform = 1
+    Visibility = 2
+    Material = 4
+    Camera = 5
+
+class AnimTrackFlags(enum.Enum):
+    Transform = 1
+    Texture = 2
+    Float = 3
+    PatternIndex = 5
+    Boolean = 8
+    Vector4 = 9
+    Direct = 256
+    ConstTramsform = 512
+    Compressed = 1024
+    Constant = 1280
+    # Use 65280 or 0xff00 when performing a bitwise 'and' on a flag
+    # Use 255 or 0x00ff when performing a bitwise 'and' on a flag, for uncompressed data
 
 def readVarLenString(file):
     nameBuffer = []
@@ -85,12 +107,6 @@ def readVarLenString(file):
         nameBuffer.append(str(file.read(1).decode("utf-8", "ignore")))
     del nameBuffer[-1]
     return ''.join(nameBuffer)
-
-AnimType = {1: "Transform", 2: "Visibility", 4: "Material", 5: "Camera"}
-AnimTrackFlags = {1: "Transform", 2: "Texture", 3: "Float", 5: "PatternIndex", 8: "Boolean", 9: "Vector4",
-                256: "Direct", 512: "ConstTramsform", 1024: "Compressed", 1280: "Constant"}
-# Use 65280 or 0xff00 when performing a bitwise 'and' on a flag, if the header is not compressed
-# Use 255 or 0x00ff when performing a bitwise 'and' on a flag, if the header is compressed
 
 def getAnimationInfo(context, filepath, import_method="create_new", auto_rotate=False):
     # Semi-global variables used by this function's hierarchy; cleared every time this function runs
@@ -139,18 +155,16 @@ def getAnimationInfo(context, filepath, import_method="create_new", auto_rotate=
                         am.seek(NodeNameOffset, 0)
                         at = AnimTrack()
                         at.type = NodeAnimType
-                        NodeName = readVarLenString(am)
-                        at.name = NodeName
+                        at.name = readVarLenString(am)
                         am.seek(NodeDataOffset + 0x08, 0)
-                        TrackFlags = struct.unpack('<L', am.read(4))[0]
-                        at.flags = TrackFlags
-                        TrackFrameCount = struct.unpack('<L', am.read(4))[0]
-                        at.frameCount = TrackFrameCount
+                        at.flags = struct.unpack('<L', am.read(4))[0]
+                        at.frameCount = struct.unpack('<L', am.read(4))[0]
                         Unk3_0 = struct.unpack('<L', am.read(4))[0]
-                        TrackDataOffset = struct.unpack('<L', am.read(4))[0]
-                        TrackDataSize = struct.unpack('<L', am.read(4))[0]
+                        at.dataOffset = struct.unpack('<L', am.read(4))[0]
+                        at.dataSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                        at.type = readVarLenString(am)
                         AnimGroups[NodeAnimType].append(at)
-                        #print("NodeName: " + str(NodeName) + " | " + "TrackFlags: " + str(TrackFlags) + " | " + "TrackFrameCount: " + str(TrackFrameCount) + " | " + "Unk3: " + str(Unk3_0) + " | " + "TrackDataOffset: " + str(TrackDataOffset) +" | " + "TrackDataSize: " + str(TrackDataSize))
+                        #print("NodeName: " + str(at.name) + " | " + "TrackFlags: " + str(at.flags) + " | " + "TrackFrameCount: " + str(at.frameCount) + " | " + "Unk3: " + str(Unk3_0) + " | " + "TrackDataOffset: " + str(at.dataOffset) +" | " + "TrackDataSize: " + str(at.dataSize))
                         # Collect the actual data pertaining to every node
                         """
                         for c in range(BoneCount):
@@ -197,7 +211,8 @@ class NUANMB_Import_Operator(bpy.types.Operator, ImportHelper):
             name="Import Method",
             description="How to import animations (when multiple are simulataneously imported",
             items=(("create_new", "Create new actions", "Animations will be imported as their own actions"),
-                   ("append_existing", "Append to current", "Animations will be imported to the current action")),
+                   ("append_current", "Append to current", "Animations will be imported to the current action"),
+                   ("overwrite_current", "Overwrite current", "Animations will overwrite the current action")),
             default="create_new",
             )
 

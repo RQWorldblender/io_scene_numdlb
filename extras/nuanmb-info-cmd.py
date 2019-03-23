@@ -1,4 +1,4 @@
-import io, os, struct, sys, time
+import enum, io, os, struct, sys, time
 
 def reinterpretCastIntToFloat(int_val):
     return struct.unpack('f', struct.pack('I', int_val))[0]
@@ -39,16 +39,66 @@ def decompressHalfFloat(bytes):
 class AnimTrack:
     def __init__(self):
         self.name = ""
-        self.type = 0
+        self.type = ""
         self.flags = 0
         self.frameCount = 0
-        self.transMatrix = []
-        self.visibMatrix = []
-        self.materMatrix = []
-        self.camerMatrix = []
+        self.dataOffset = 0
+        self.dataSize = 0
+        self.transformAnim = []
+        self.visibilityAnim = []
+        self.materialAnim = []
+        self.cameraAnim = []
 
     def __repr__(self):
-        return "Node name: " + str(self.name) + "\t| Type: " + AnimType[self.type] + "\t| Flags: " + str(self.flags) + "\t| # of frames: " + str(self.frameCount) + "\n"
+        return "Node name: " + str(self.name) + "\t| Type: " + str(self.type) + "\t| Flags: " + str(self.flags) + "\t| # of frames: " + str(self.frameCount) + "\t| Data offset: " + str(self.dataOffset) + "\t| Data size: " + str(self.dataSize) + "\n"
+
+class AnimCompressedHeader:
+    def __init__(self):
+        self.unk_4 = 0 # always 4?
+        self.flags = 0
+        self.defaultDataOffset = 0
+        self.bitsPerEntry = 0
+        self.compressedDataOffset = 0
+        self.frameCount = 0
+
+    def __init__(self, unk_4, flags, defaultDataOffset, bitsPerEntry, compressedDataOffset, frameCount):
+        self.unk_4 = unk_4 # always 4?
+        self.flags = flags
+        self.defaultDataOffset = defaultDataOffset
+        self.bitsPerEntry = bitsPerEntry
+        self.compressedDataOffset = compressedDataOffset
+        self.frameCount = frameCount
+
+class AnimCompressedItem:
+    def __init__(self):
+        self.start = 0
+        self.end = 0
+        self.count = 0
+
+    def __init__(self, start, end, count):
+        self.start = start
+        self.end = end
+        self.count = count
+
+class AnimType(enum.Enum):
+    Transform = 1
+    Visibility = 2
+    Material = 4
+    Camera = 5
+
+class AnimTrackFlags(enum.Enum):
+    Transform = 1
+    Texture = 2
+    Float = 3
+    PatternIndex = 5
+    Boolean = 8
+    Vector4 = 9
+    Direct = 256
+    ConstTramsform = 512
+    Compressed = 1024
+    Constant = 1280
+    # Use 65280 or 0xff00 when performing a bitwise 'and' on a flag
+    # Use 255 or 0x00ff when performing a bitwise 'and' on a flag, for uncompressed data
 
 def readVarLenString(file):
     nameBuffer = []
@@ -57,18 +107,12 @@ def readVarLenString(file):
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
-AnimType = {1: "Transform", 2: "Visibility", 4: "Material", 5: "Camera"}
-AnimTrackFlags = {1: "Transform", 2: "Texture", 3: "Float", 5: "PatternIndex", 8: "Boolean", 9: "Vector4",
-                256: "Direct", 512: "ConstTramsform", 1024: "Compressed", 1280: "Constant"}
-# Use 65280 or 0xff00 when performing a bitwise 'and' on a flag, if the header is not compressed
-# Use 255 or 0x00ff when performing a bitwise 'and' on a flag, if the header is compressed
-
 def getAnimationInfo(animpath):
-    AnimName = ""
+    global AnimName; AnimName = ""
     GroupCount = 0
-    FrameCount = 0
+    global FrameCount; FrameCount = 0
     NodeCount = 0
-    AnimGroups = {}
+    global AnimGroups; AnimGroups = {}
     # Structure of this dict is: {AnimType (numeric): an array of AnimTrack objects}
     
     if os.path.isfile(animpath):
@@ -101,7 +145,7 @@ def getAnimationInfo(animpath):
                     NodeCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                     AnimGroups[NodeAnimType] = [] # Create empty array to append to later on
                     NextGroupPos = am.tell()
-                    print("AnimType: " + AnimType[NodeAnimType] + " | " + "NodeOffset: " + str(NodeOffset) + " | " + "NodeCount: " + str(NodeCount) + " | NextGroupPos: " + str(NextGroupPos))
+                    print("AnimType: " + AnimType(NodeAnimType).name + " | " + "NodeOffset: " + str(NodeOffset) + " | " + "NodeCount: " + str(NodeCount) + " | NextGroupPos: " + str(NextGroupPos))
                     am.seek(NodeOffset, 0)
                     for n in range(NodeCount):
                         NodeNameOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
@@ -110,40 +154,89 @@ def getAnimationInfo(animpath):
                         print("NodeNameOffset: " + str(NodeNameOffset) + " | " + "NodeDataOffset: " + str(NodeDataOffset) + " | " + "NextNodePos: " + str(NextNodePos))
                         am.seek(NodeNameOffset, 0)
                         at = AnimTrack()
-                        at.type = NodeAnimType
-                        NodeName = readVarLenString(am)
-                        at.name = NodeName
+                        at.name = readVarLenString(am)
                         am.seek(NodeDataOffset + 0x08, 0)
-                        TrackFlags = struct.unpack('<L', am.read(4))[0]
-                        at.flags = TrackFlags
-                        TrackFrameCount = struct.unpack('<L', am.read(4))[0]
-                        at.frameCount = TrackFrameCount
+                        at.flags = struct.unpack('<L', am.read(4))[0]
+                        at.frameCount = struct.unpack('<L', am.read(4))[0]
                         Unk3_0 = struct.unpack('<L', am.read(4))[0]
-                        TrackDataOffset = struct.unpack('<L', am.read(4))[0]
-                        TrackDataSize = struct.unpack('<L', am.read(4))[0]
+                        at.dataOffset = struct.unpack('<L', am.read(4))[0]
+                        at.dataSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                        at.type = readVarLenString(am)
+                        print("NodeName: " + str(at.name) + " | " + "TrackFlags: " + str(at.flags) + " | " + "TrackFrameCount: " + str(at.frameCount) + " | " + "Unk3: " + str(Unk3_0) + " | " + "TrackDataOffset: " + str(at.dataOffset) +" | " + "TrackDataSize: " + str(at.dataSize))
                         AnimGroups[NodeAnimType].append(at)
-                        print("NodeName: " + str(NodeName) + " | " + "TrackFlags: " + str(TrackFlags) + " | " + "TrackFrameCount: " + str(TrackFrameCount) + " | " + "Unk3: " + str(Unk3_0) + " | " + "TrackDataOffset: " + str(TrackDataOffset) +" | " + "TrackDataSize: " + str(TrackDataSize))
-                        # Collect the actual data pertaining to every node
-                        """
-                        for c in range(BoneCount):
-                            BoneNameOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                            BoneRet = am.tell()
-                            am.seek(BoneNameOffset, 0)
-                            BoneName = readVarLenString(b)
-                            am.seek(BoneRet, 0)
-                            BoneID = struct.unpack('<H', am.read(2))[0]
-                            BoneParent = struct.unpack('<H', am.read(2))[0]
-                            BoneUnk = struct.unpack('<L', am.read(4))[0]
-                            BoneParent_array.append(BoneParent)
-                            BoneName_array.append(BoneName)
-                        """
                         am.seek(NextNodePos, 0)
                     print("---------")
                     am.seek(NextGroupPos, 0)
                 print(AnimGroups)
+                readAnimations(am)
             else:
                 raise RuntimeError("%s is not a valid NUANMB file." % filepath)
 
+def readAnimations(ao):
+    for ag in AnimGroups.items():
+        for track in ag[1]:
+            ao.seek(track.dataOffset, 0)    
+            # Collect the actual data pertaining to every node
+            if (ag[0] == AnimType.Material.value):
+                if ((track.flags & 0xff00) == AnimTrackFlags.Constant.value or (track.flags & 0xff00) == AnimTrackFlags.ConstTramsform.value):
+                    track.materialAnim.append(readDirectData(ao, track))
+                if ((track.flags & 0xff00) == AnimTrackFlags.Direct.value):
+                    for t in range(track.frameCount):
+                        track.materialAnim.append(readDirect(ao, track))
+                if ((track.flags & 0xff00) == AnimTrackFlags.Compressed.value):
+                    readCompressedData(ao, track)
+                print(track.name + " | " + AnimType.Material.name)
+                #print(track.materialAnim)
+
+            elif (ag[0] == AnimType.Visibility.value):
+                if ((track.flags & 0xff00) == AnimTrackFlags.Constant.value or (track.flags & 0xff00) == AnimTrackFlags.ConstTramsform.value):
+                    track.visibilityAnim.append(readDirectData(ao, track))
+                if ((track.flags & 0xff00) == AnimTrackFlags.Direct.value):
+                    for t in range(track.frameCount):
+                        track.visibilityAnim.append(readDirect(ao, track))
+                if ((track.flags & 0xff00) == AnimTrackFlags.Compressed.value):
+                    readCompressedData(ao, track)
+                print(track.name + " | " + AnimType.Visibility.name)
+                #print(track.visibilityAnim)
+
+            elif (ag[0] == AnimType.Transform.value):
+                if ((track.flags & 0xff00) == AnimTrackFlags.Constant.value or (track.flags & 0xff00) == AnimTrackFlags.ConstTramsform.value):
+                    track.transformAnim.append(readDirectData(ao, track))
+                if ((track.flags & 0xff00) == AnimTrackFlags.Direct.value):
+                    for t in range(track.frameCount):
+                        track.transformAnim.append(readDirect(ao, track))
+                if ((track.flags & 0xff00) == AnimTrackFlags.Compressed.value):
+                    readCompressedData(ao, track)
+                print(track.name + " | " + AnimType.Transform.name)
+                #print(track.transformAnim)
+
+            elif (ag[0] == AnimType.Camera.value):
+                print("Camera data extraction not yet implemented")
+
+def readDirectData(aq, track):
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Transform.value):
+        # Scale [X, Y, Z]
+        sx = struct.unpack('<f', aq.read(4))[0]; sy = struct.unpack('<f', aq.read(4))[0]; sz = struct.unpack('<f', aq.read(4))[0]
+        # Rotaton [X, Y, Z, W]
+        rx = struct.unpack('<f', aq.read(4))[0]; ry = struct.unpack('<f', aq.read(4))[0]; rz = struct.unpack('<f', aq.read(4))[0]; rw = struct.unpack('<f', aq.read(4))[0]
+        # Position [X, Y, Z]
+        px = struct.unpack('<f', aq.read(4))[0]; py = struct.unpack('<f', aq.read(4))[0]; pz = struct.unpack('<f', aq.read(4))[0]
+        return [[px, py, pz], [rx, ry, rz, rw], [sx, sy, sz]]
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Texture.value):
+        pass
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Float.value):
+        return struct.unpack('<f', aq.read(4))[0]
+    if ((track.flags & 0x00ff) == AnimTrackFlags.PatternIndex.value):
+        pass
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Boolean):
+        return struct.unpack('<B', aq.read(1))[0] == 1
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Vector4):
+        # [X, Y, Z, W]
+        x = struct.unpack('<f', aq.read(4))[0]; y = struct.unpack('<f', aq.read(4))[0]; z = struct.unpack('<f', aq.read(4))[0]; w = struct.unpack('<f', aq.read(4))[0]
+        return [x, y, z, w]
+
+def readCompressedData(aq, track):
+    print("Compressed data extraction not yet implemented")
 
 animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a00wait1.nuanmb"
 #animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a01turn.nuanmb"
