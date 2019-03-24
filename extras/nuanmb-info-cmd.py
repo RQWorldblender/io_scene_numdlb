@@ -1,4 +1,4 @@
-import enum, io, mathutils, os, struct, sys, time
+import bitio, enum, io, math, mathutils, os, struct, sys, time
 
 class AnimTrack:
     def __init__(self):
@@ -66,30 +66,17 @@ def readVarLenString(file):
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
-def readBits(buffer, bitCount):
-    b = buffer.read(1) # Peek at next byte
-    buffer.seek(-1, 1) # Go back to previous byte
-    value = 0
-    LE = 0
-    bitIndex = 0
-    for i in range(bitCount):
-        bit = (b & (0x1 << bitPosition)) >> bitPosition
-        value = value | (bit << (LE + bitIndex))
-        bitPosition += 1
-        bitIndex += 1
-        if (bitPosition >= 8):
-            bitPosition = 0
-            b = buffer.read(2) # Peek at next two bytes
-            buffer.seek(-1, 1) # Go back to previous byte
+# A standard linear interpolation function for individual values
+def lerp(av, bv, v0, v1, factor):
+    if (v0 == v1):
+        return av
+    if (factor == v0):
+        return av
+    if (factor == v1):
+        return bv
 
-        if (bitIndex >= 8):
-            bitIndex = 0;
-            if ((LE + 8) > bitCount):
-                LE = bitCount - 1
-            else:
-                LE += 8
-
-    return value
+    mu = (factor - v0) / (v1 - v0)
+    return (av * (1 - mu)) + (bv * mu)
 
 def getAnimationInfo(animpath):
     global AnimName; AnimName = ""
@@ -182,7 +169,16 @@ def readDirectData(aq, track):
         rx = struct.unpack('<f', aq.read(4))[0]; ry = struct.unpack('<f', aq.read(4))[0]; rz = struct.unpack('<f', aq.read(4))[0]; rw = struct.unpack('<f', aq.read(4))[0]
         # Position [X, Y, Z]
         px = struct.unpack('<f', aq.read(4))[0]; py = struct.unpack('<f', aq.read(4))[0]; pz = struct.unpack('<f', aq.read(4))[0]
-        track.animations.append(mathutils.Matrix([[px, py, pz, 0], [rx, ry, rz, rw], [sx, sy, sz, 0]]))
+        track.animations.append(mathutils.Matrix([[px, py, pz, 0], [rx, ry, rz, rw], [sx, sy, sz, 1]]))
+        """
+        Matrix composition:
+                | X | Y | Z | W |
+        Position|PX |PY |PZ |PW | 0
+        Rotation|RX |RY |RZ |RW | 1
+        Scale   |SX |SY |SZ |SW | 2
+                  0   1   2   3
+        PW and SW are not used here, instead being populated with '0' and '1', respectively
+        """
 
     if ((track.flags & 0x00ff) == AnimTrackFlags.Texture.value):
         pass
@@ -218,7 +214,95 @@ def readCompressedData(aq, track):
             Count = struct.unpack('<L', aq.read(4))[0]; aq.seek(0x04, 1)
             aci = AnimCompressedItem(Start, End, Count)
             acj.append(aci)
-        print(acj)
+        #print(acj)
+
+        aq.seek(track.dataOffset + ach.defaultDataOffset, 0)
+        # Scale [X, Y, Z]
+        sx = struct.unpack('<f', aq.read(4))[0]; sy = struct.unpack('<f', aq.read(4))[0]; sz = struct.unpack('<f', aq.read(4))[0]
+        # Rotaton [X, Y, Z, W]
+        rx = struct.unpack('<f', aq.read(4))[0]; ry = struct.unpack('<f', aq.read(4))[0]; rz = struct.unpack('<f', aq.read(4))[0]; rw = struct.unpack('<f', aq.read(4))[0]
+        # Position [X, Y, Z, W]
+        px = struct.unpack('<f', aq.read(4))[0]; py = struct.unpack('<f', aq.read(4))[0]; pz = struct.unpack('<f', aq.read(4))[0]; pw = struct.unpack('<H', aq.read(2))[0]
+
+        aq.seek(track.dataOffset + ach.compressedDataOffset, 0)
+        for f in range(ach.frameCount):
+            transform = mathutils.Matrix([[px, py, pz, pw], [rx, ry, rz, rw], [sx, sy, sz, 1]])
+            """
+            Matrix composition:
+                    | X | Y | Z | W |
+            Position|PX |PY |PZ |PW | 0
+            Rotation|RX |RY |RZ |RW | 1
+            Scale   |SX |SY |SZ |SW | 2
+                      0   1   2   3
+            SW is used to represent absolute scale, being populated with '1' by default
+            """
+
+            for itemIndex in range(len(acj)):
+                # First check if this track should be parsed
+                # TODO: Don't hard code these flags.
+                if (not ((itemIndex == 0 and (ach.flags & 0x3) == 0x3) # isotropic scale
+                    or (itemIndex >= 0 and itemIndex <= 2 and (ach.flags & 0x3) == 0x1) # normal scale
+                    or (itemIndex > 2 and itemIndex <= 5 and (ach.flags & 0x4) > 0)
+                    or (itemIndex > 5 and itemIndex <= 8 and (ach.flags & 0x8) > 0))):
+                    continue
+
+                item = acj[itemIndex]
+                # Decompress
+                valueBitCount = item.count
+                if (valueBitCount == 0):
+                    continue
+
+                br = bitio.BitReader(aq)
+                value = br.readbits(valueBitCount)
+                scale = 0
+                for k in range(valueBitCount):
+                    scale = scale | (0x1 << k)
+
+                frameValue = lerp(item.start, item.end, 0, 1, value / float(scale))
+                if frameValue == float('NaN'):
+                    frameValue = 0
+
+                # The 'Transform' type frequently depends on flags
+                if ((ach.flags & 0x3) == 0x3):
+                    # Scale isotropic
+                    if (itemIndex == 0):
+                        transform[2][3] = frameValue
+
+                if ((ach.flags & 0x3) == 0x1):
+                    # Scale normal
+                    if (itemIndex == 0):
+                        transform[2][0] = frameValue
+                    elif (itemIndex == 1):
+                        transform[2][1] = frameValue
+                    elif (itemIndex == 2):
+                        transform[2][2] = frameValue
+
+                # Rotation and Position
+                if (itemIndex == 3):
+                    transform[1][0] = frameValue
+                elif (itemIndex == 4):
+                    transform[1][1] = frameValue
+                elif (itemIndex == 5):
+                    transform[1][2] = frameValue
+                elif (itemIndex == 6):
+                    transform[0][0] = frameValue
+                elif (itemIndex == 7):
+                    transform[0][1] = frameValue
+                elif (itemIndex == 8):
+                    transform[0][2] = frameValue
+
+            # Rotations have an extra bit at the end
+            if ((ach.flags & 0x4) > 0):
+                br = bitio.BitReader(aq)
+                wFlip = br.readbits(1) == 1
+
+                # W is calculated
+                transform[1][3] = math.sqrt(abs(1 - (pow(transform[1][0], 2) + pow(transform[1][1], 2) + pow(transform[1][2], 2))))
+
+                if wFlip:
+                    transform[1][3] *= -1
+
+            track.animations.append(transform)
 
     if ((track.flags & 0x00ff) == AnimTrackFlags.Texture.value):
         print("Compressed texture data extraction not yet implemented")
@@ -242,9 +326,37 @@ def readCompressedData(aq, track):
             Count = struct.unpack('<L', aq.read(4))[0]; aq.seek(0x04, 1)
             aci = AnimCompressedItem(Start, End, Count)
             acj.append(aci)
-        print(acj) 
+        #print(acj)
 
-animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a00wait1.nuanmb"
-#animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a01turn.nuanmb"
+        values = []
+        # Copy default values
+        for c in range(4):
+            values.append(struct.unpack('<f', aq.read(4))[0])
+
+        aq.seek(track.dataOffset + ach.compressedDataOffset, 0)
+        for f in range(ach.frameCount):
+            for itemIndex in range(len(acj)):
+                item = acj[itemIndex]
+                # Decompress
+                valueBitCount = item.count
+                if (valueBitCount == 0):
+                    continue
+
+                br = bitio.BitReader(aq)
+                value = br.readbits(valueBitCount)
+                scale = 0
+                for k in range(valueBitCount):
+                    scale = scale | (0x1 << k)
+
+                frameValue = lerp(item.start, item.end, 0, 1, value / float(scale))
+                if frameValue == float('NaN'):
+                    frameValue = 0
+
+                values[itemIndex] = frameValue
+
+            track.animations.append(values)
+
+#animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a00wait1.nuanmb"
+animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a01turn.nuanmb"
 
 getAnimationInfo(animpath)

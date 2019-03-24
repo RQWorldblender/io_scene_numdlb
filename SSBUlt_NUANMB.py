@@ -26,44 +26,7 @@ bl_info = {
     "tracker_url": "https://gitlab.com/Worldblender/io_scene_numdlb/issues",
     "category": "Import-Export"}
 
-import bmesh, bpy, bpy_extras, enum, mathutils, os, struct, string, sys, time
-from progress_report import ProgressReport, ProgressReportSubstep
-
-def reinterpretCastIntToFloat(int_val):
-    return struct.unpack('f', struct.pack('I', int_val))[0]
-
-def decompressHalfFloat(bytes):
-    if sys.version_info[0] == 3 and sys.version_info[1] > 5:
-        return struct.unpack("<e", bytes)[0]
-    else:
-        float16 = int(struct.unpack('<H', bytes)[0])
-        # sign
-        s = (float16 >> 15) & 0x00000001
-        # exponent
-        e = (float16 >> 10) & 0x0000001f
-        # fraction
-        f = float16 & 0x000003ff
-
-        if e == 0:
-            if f == 0:
-                return reinterpretCastIntToFloat(int(s << 31))
-            else:
-                while not (f & 0x00000400):
-                    f = f << 1
-                    e -= 1
-                e += 1
-                f &= ~0x00000400
-                #print(s,e,f)
-        elif e == 31:
-            if f == 0:
-                return reinterpretCastIntToFloat(int((s << 31) | 0x7f800000))
-            else:
-                return reinterpretCastIntToFloat(int((s << 31) | 0x7f800000 |
-                    (f << 13)))
-
-        e = e + (127 -15)
-        f = f << 13
-        return reinterpretCastIntToFloat(int((s << 31) | (e << 23) | f))
+import bitio, bmesh, bpy, bpy_extras, enum, io, math, mathutils, os, struct, string, sys, time
 
 class AnimTrack:
     def __init__(self):
@@ -229,7 +192,16 @@ def readDirectData(aq, track):
         rx = struct.unpack('<f', aq.read(4))[0]; ry = struct.unpack('<f', aq.read(4))[0]; rz = struct.unpack('<f', aq.read(4))[0]; rw = struct.unpack('<f', aq.read(4))[0]
         # Position [X, Y, Z]
         px = struct.unpack('<f', aq.read(4))[0]; py = struct.unpack('<f', aq.read(4))[0]; pz = struct.unpack('<f', aq.read(4))[0]
-        track.animations.append(mathutils.Matrix([[px, py, pz, 0], [rx, ry, rz, rw], [sx, sy, sz, 0]]))
+        track.animations.append(mathutils.Matrix([[px, py, pz, 0], [rx, ry, rz, rw], [sx, sy, sz, 1]]))
+        """
+        Matrix composition:
+                | X | Y | Z | W |
+        Position|PX |PY |PZ |PW | 0
+        Rotation|RX |RY |RZ |RW | 1
+        Scale   |SX |SY |SZ |SW | 2
+                  0   1   2   3
+        PW and SW are not used here, instead being populated with '0' and '1', respectively
+        """
 
     if ((track.flags & 0x00ff) == AnimTrackFlags.Texture.value):
         pass
@@ -247,6 +219,165 @@ def readDirectData(aq, track):
         # [X, Y, Z, W]
         x = struct.unpack('<f', aq.read(4))[0]; y = struct.unpack('<f', aq.read(4))[0]; z = struct.unpack('<f', aq.read(4))[0]; w = struct.unpack('<f', aq.read(4))[0]
         track.animations.append(mathutils.Vector([x, y, z, w]))
+
+def readCompressedData(aq, track):
+    ach = AnimCompressedHeader()
+    ach.unk_4 = struct.unpack('<H', aq.read(2))[0]
+    ach.flags = struct.unpack('<H', aq.read(2))[0]
+    ach.defaultDataOffset = struct.unpack('<H', aq.read(2))[0]
+    ach.bitsPerEntry = struct.unpack('<H', aq.read(2))[0]
+    ach.compressedDataOffset = struct.unpack('<L', aq.read(4))[0]
+    ach.frameCount = struct.unpack('<L', aq.read(4))[0]
+    print(ach)
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Transform.value):
+        acj = [] # Contains an array of AnimCompressedItem objects
+        for i in range(9):
+            Start = struct.unpack('<f', aq.read(4))[0]
+            End = struct.unpack('<f', aq.read(4))[0]
+            Count = struct.unpack('<L', aq.read(4))[0]; aq.seek(0x04, 1)
+            aci = AnimCompressedItem(Start, End, Count)
+            acj.append(aci)
+        #print(acj)
+
+        aq.seek(track.dataOffset + ach.defaultDataOffset, 0)
+        # Scale [X, Y, Z]
+        sx = struct.unpack('<f', aq.read(4))[0]; sy = struct.unpack('<f', aq.read(4))[0]; sz = struct.unpack('<f', aq.read(4))[0]
+        # Rotaton [X, Y, Z, W]
+        rx = struct.unpack('<f', aq.read(4))[0]; ry = struct.unpack('<f', aq.read(4))[0]; rz = struct.unpack('<f', aq.read(4))[0]; rw = struct.unpack('<f', aq.read(4))[0]
+        # Position [X, Y, Z, W]
+        px = struct.unpack('<f', aq.read(4))[0]; py = struct.unpack('<f', aq.read(4))[0]; pz = struct.unpack('<f', aq.read(4))[0]; pw = struct.unpack('<H', aq.read(2))[0]
+
+        aq.seek(track.dataOffset + ach.compressedDataOffset, 0)
+        for f in range(ach.frameCount):
+            transform = mathutils.Matrix([[px, py, pz, pw], [rx, ry, rz, rw], [sx, sy, sz, 1]])
+            """
+            Matrix composition:
+                    | X | Y | Z | W |
+            Position|PX |PY |PZ |PW | 0
+            Rotation|RX |RY |RZ |RW | 1
+            Scale   |SX |SY |SZ |SW | 2
+                      0   1   2   3
+            SW is used to represent absolute scale, being populated with '1' by default
+            """
+
+            for itemIndex in range(len(acj)):
+                # First check if this track should be parsed
+                # TODO: Don't hard code these flags.
+                if (not ((itemIndex == 0 and (ach.flags & 0x3) == 0x3) # isotropic scale
+                    or (itemIndex >= 0 and itemIndex <= 2 and (ach.flags & 0x3) == 0x1) # normal scale
+                    or (itemIndex > 2 and itemIndex <= 5 and (ach.flags & 0x4) > 0)
+                    or (itemIndex > 5 and itemIndex <= 8 and (ach.flags & 0x8) > 0))):
+                    continue
+
+                item = acj[itemIndex]
+                # Decompress
+                valueBitCount = item.count
+                if (valueBitCount == 0):
+                    continue
+
+                br = bitio.BitReader(aq)
+                value = br.readbits(valueBitCount)
+                scale = 0
+                for k in range(valueBitCount):
+                    scale = scale | (0x1 << k)
+
+                frameValue = lerp(item.start, item.end, 0, 1, value / float(scale))
+                if frameValue == float('NaN'):
+                    frameValue = 0
+
+                # The 'Transform' type frequently depends on flags
+                if ((ach.flags & 0x3) == 0x3):
+                    # Scale isotropic
+                    if (itemIndex == 0):
+                        transform[2][3] = frameValue
+
+                if ((ach.flags & 0x3) == 0x1):
+                    # Scale normal
+                    if (itemIndex == 0):
+                        transform[2][0] = frameValue
+                    elif (itemIndex == 1):
+                        transform[2][1] = frameValue
+                    elif (itemIndex == 2):
+                        transform[2][2] = frameValue
+
+                # Rotation and Position
+                if (itemIndex == 3):
+                    transform[1][0] = frameValue
+                elif (itemIndex == 4):
+                    transform[1][1] = frameValue
+                elif (itemIndex == 5):
+                    transform[1][2] = frameValue
+                elif (itemIndex == 6):
+                    transform[0][0] = frameValue
+                elif (itemIndex == 7):
+                    transform[0][1] = frameValue
+                elif (itemIndex == 8):
+                    transform[0][2] = frameValue
+
+            # Rotations have an extra bit at the end
+            if ((ach.flags & 0x4) > 0):
+                br = bitio.BitReader(aq)
+                wFlip = br.readbits(1) == 1
+
+                # W is calculated
+                transform[1][3] = math.sqrt(abs(1 - (pow(transform[1][0], 2) + pow(transform[1][1], 2) + pow(transform[1][2], 2))))
+
+                if wFlip:
+                    transform[1][3] *= -1
+
+            track.animations.append(transform)
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Texture.value):
+        print("Compressed texture data extraction not yet implemented")
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Float.value):
+        print("Compressed float data extraction not yet implemented")
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.PatternIndex.value):
+        print("Compressed pattern index data extraction not yet implemented")
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Boolean):
+        aq.seek(track.dataOffset + ach.compressedDataOffset, 0)
+        for t in range(ach.frameCount):
+            track.animations.append(readBits(aq, ach.bitsPerEntry) == 1)
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Vector4):
+        acj = [] # Contains an array of AnimCompressedItem objects
+        for i in range(4):
+            Start = struct.unpack('<f', aq.read(4))[0]
+            End = struct.unpack('<f', aq.read(4))[0]
+            Count = struct.unpack('<L', aq.read(4))[0]; aq.seek(0x04, 1)
+            aci = AnimCompressedItem(Start, End, Count)
+            acj.append(aci)
+        #print(acj)
+
+        values = []
+        # Copy default values
+        for c in range(4):
+            values.append(struct.unpack('<f', aq.read(4))[0])
+
+        aq.seek(track.dataOffset + ach.compressedDataOffset, 0)
+        for f in range(ach.frameCount):
+            for itemIndex in range(len(acj)):
+                item = acj[itemIndex]
+                # Decompress
+                valueBitCount = item.count
+                if (valueBitCount == 0):
+                    continue
+
+                br = bitio.BitReader(aq)
+                value = br.readbits(valueBitCount)
+                scale = 0
+                for k in range(valueBitCount):
+                    scale = scale | (0x1 << k)
+
+                frameValue = lerp(item.start, item.end, 0, 1, value / float(scale))
+                if frameValue == float('NaN'):
+                    frameValue = 0
+
+                values[itemIndex] = frameValue
+
+            track.animations.append(values)
 
 def importAnimations(context, import_method="create_new", auto_rotate=False):
     pass # This function deals with all of the Blender-specific operations
