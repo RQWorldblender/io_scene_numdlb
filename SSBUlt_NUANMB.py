@@ -73,13 +73,36 @@ class AnimTrack:
         self.frameCount = 0
         self.dataOffset = 0
         self.dataSize = 0
-        self.transformAnim = []
-        self.visibilityAnim = []
-        self.materialAnim = []
-        self.cameraAnim = []
+        self.animations = []
 
     def __repr__(self):
         return "Node name: " + str(self.name) + "\t| Type: " + str(self.type) + "\t| Flags: " + str(self.flags) + "\t| # of frames: " + str(self.frameCount) + "\t| Data offset: " + str(self.dataOffset) + "\t| Data size: " + str(self.dataSize) + "\n"
+
+class AnimCompressedHeader:
+    def __init__(self):
+        self.unk_4 = 0 # always 4?
+        self.flags = 0
+        self.defaultDataOffset = 0
+        self.bitsPerEntry = 0
+        self.compressedDataOffset = 0
+        self.frameCount = 0
+
+    def __repr__(self):
+        return "Flags: " + str(self.flags) + "\t| Bits/entry: " + str(self.bitsPerEntry) + "\t| Data offset: " + str(self.compressedDataOffset) + "\t| Frame count: " + str(self.frameCount) + "\n"
+
+class AnimCompressedItem:
+    def __init__(self):
+        self.start = 0
+        self.end = 0
+        self.count = 0
+
+    def __init__(self, start, end, count):
+        self.start = start
+        self.end = end
+        self.count = count
+
+    def __repr__(self):
+        return "Start: " + str(self.start) + "\t| End: " + str(self.end) + "\t| Count: " + str(self.count) + "\n"
 
 class AnimType(enum.Enum):
     Transform = 1
@@ -95,7 +118,7 @@ class AnimTrackFlags(enum.Enum):
     Boolean = 8
     Vector4 = 9
     Direct = 256
-    ConstTramsform = 512
+    ConstTransform = 512
     Compressed = 1024
     Constant = 1280
     # Use 65280 or 0xff00 when performing a bitwise 'and' on a flag
@@ -131,9 +154,9 @@ def getAnimationInfo(context, filepath, import_method="create_new", auto_rotate=
                 AnimNameOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                 GroupOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                 GroupCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                Buffer1 = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                Buffer2 = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                #print("GroupOffset: " + str(GroupOffset) + " | " + "GroupCount: " + str(GroupCount) + " | " + "Buffer1: " + str(Buffer1) + " | " + "Buffer2: " + str(Buffer2))
+                BufferOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                BufferSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                #print("GroupOffset: " + str(GroupOffset) + " | " + "GroupCount: " + str(GroupCount) + " | " + "BufferOffset: " + str(BufferOffset) + " | " + "BufferSize: " + str(BufferSize))
                 am.seek(AnimNameOffset, 0)
                 AnimName = readVarLenString(am); am.seek(0x04, 1)
                 print("AnimName: " + AnimName)
@@ -162,28 +185,15 @@ def getAnimationInfo(context, filepath, import_method="create_new", auto_rotate=
                         Unk3_0 = struct.unpack('<L', am.read(4))[0]
                         at.dataOffset = struct.unpack('<L', am.read(4))[0]
                         at.dataSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                        at.type = readVarLenString(am)
-                        AnimGroups[NodeAnimType].append(at)
+                        at.type = readVarLenString(am)            
                         #print("NodeName: " + str(at.name) + " | " + "TrackFlags: " + str(at.flags) + " | " + "TrackFrameCount: " + str(at.frameCount) + " | " + "Unk3: " + str(Unk3_0) + " | " + "TrackDataOffset: " + str(at.dataOffset) +" | " + "TrackDataSize: " + str(at.dataSize))
-                        # Collect the actual data pertaining to every node
-                        """
-                        for c in range(BoneCount):
-                            BoneNameOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                            BoneRet = am.tell()
-                            am.seek(BoneNameOffset, 0)
-                            BoneName = readVarLenString(b)
-                            am.seek(BoneRet, 0)
-                            BoneID = struct.unpack('<H', am.read(2))[0]
-                            BoneParent = struct.unpack('<H', am.read(2))[0]
-                            BoneUnk = struct.unpack('<L', am.read(4))[0]
-                            BoneParent_array.append(BoneParent)
-                            BoneName_array.append(BoneName)
-                        """
+                        AnimGroups[NodeAnimType].append(at)
                         am.seek(NextNodePos, 0)
                     #print("---------")
                     am.seek(NextGroupPos, 0)
                 print(AnimGroups)
-                # importAnimations(context, import_method, auto_rotate)
+                am.seek(BufferOffset, 0) # This must happen or all data will be read incorrectly
+                readAnimations(io.BytesIO(am.read(BufferSize)))
             else:
                 raise RuntimeError("%s is not a valid NUANMB file." % filepath)
         
@@ -193,6 +203,50 @@ def getAnimationInfo(context, filepath, import_method="create_new", auto_rotate=
 #            bpy.ops.object.select_pattern(pattern="*Armature*")
 #            bpy.ops.transform.rotate(value=math.radians(90), axis=(1, 0, 0), constraint_axis=(True, False, False), constraint_orientation='GLOBAL', mirror=False, proportional='DISABLED', proportional_edit_falloff='SMOOTH', proportional_size=1)
 #            bpy.ops.object.select_all(action='TOGGLE')
+
+def readAnimations(ao):
+    for ag in AnimGroups.items():
+        for track in ag[1]:
+            ao.seek(track.dataOffset, 0)    
+            # Collect the actual data pertaining to every node
+            if ((track.flags & 0xff00) == AnimTrackFlags.Constant.value or (track.flags & 0xff00) == AnimTrackFlags.ConstTransform.value):
+                readDirectData(ao, track)
+            if ((track.flags & 0xff00) == AnimTrackFlags.Direct.value):
+                for t in range(track.frameCount):
+                    readDirect(ao, track)
+            if ((track.flags & 0xff00) == AnimTrackFlags.Compressed.value):
+                readCompressedData(ao, track)
+            print(track.name + " | " + AnimType(ag[0]).name)
+            print(track.animations)
+
+    ao.close()
+
+def readDirectData(aq, track):
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Transform.value):
+        # Scale [X, Y, Z]
+        sx = struct.unpack('<f', aq.read(4))[0]; sy = struct.unpack('<f', aq.read(4))[0]; sz = struct.unpack('<f', aq.read(4))[0]
+        # Rotaton [X, Y, Z, W]
+        rx = struct.unpack('<f', aq.read(4))[0]; ry = struct.unpack('<f', aq.read(4))[0]; rz = struct.unpack('<f', aq.read(4))[0]; rw = struct.unpack('<f', aq.read(4))[0]
+        # Position [X, Y, Z]
+        px = struct.unpack('<f', aq.read(4))[0]; py = struct.unpack('<f', aq.read(4))[0]; pz = struct.unpack('<f', aq.read(4))[0]
+        track.animations.append(mathutils.Matrix([[px, py, pz], [rx, ry, rz, rw], [sx, sy, sz]]))
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Texture.value):
+        pass
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Float.value):
+        track.animations.append(struct.unpack('<f', aq.read(4))[0])
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.PatternIndex.value):
+        pass
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Boolean):
+        track.animations.append(struct.unpack('<B', aq.read(1))[0] == 1)
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Vector4):
+        # [X, Y, Z, W]
+        x = struct.unpack('<f', aq.read(4))[0]; y = struct.unpack('<f', aq.read(4))[0]; z = struct.unpack('<f', aq.read(4))[0]; w = struct.unpack('<f', aq.read(4))[0]
+        track.animations.append(mathutils.Vector([x, y, z, w]))
 
 def importAnimations(context, import_method="create_new", auto_rotate=False):
     pass # This function deals with all of the Blender-specific operations

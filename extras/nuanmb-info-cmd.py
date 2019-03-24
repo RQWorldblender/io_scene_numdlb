@@ -1,40 +1,4 @@
-import enum, io, os, struct, sys, time
-
-def reinterpretCastIntToFloat(int_val):
-    return struct.unpack('f', struct.pack('I', int_val))[0]
-
-def decompressHalfFloat(bytes):
-    if sys.version_info[0] == 3 and sys.version_info[1] > 5:
-        return struct.unpack("<e", bytes)[0]
-    else:
-        float16 = int(struct.unpack('<H', bytes)[0])
-        # sign
-        s = (float16 >> 15) & 0x00000001
-        # exponent
-        e = (float16 >> 10) & 0x0000001f
-        # fraction
-        f = float16 & 0x000003ff
-
-        if e == 0:
-            if f == 0:
-                return reinterpretCastIntToFloat(int(s << 31))
-            else:
-                while not (f & 0x00000400):
-                    f = f << 1
-                    e -= 1
-                e += 1
-                f &= ~0x00000400
-                #print(s,e,f)
-        elif e == 31:
-            if f == 0:
-                return reinterpretCastIntToFloat(int((s << 31) | 0x7f800000))
-            else:
-                return reinterpretCastIntToFloat(int((s << 31) | 0x7f800000 |
-                    (f << 13)))
-
-        e = e + (127 -15)
-        f = f << 13
-        return reinterpretCastIntToFloat(int((s << 31) | (e << 23) | f))
+import enum, io, marshal, os, struct, sys, time
 
 class AnimTrack:
     def __init__(self):
@@ -44,10 +8,7 @@ class AnimTrack:
         self.frameCount = 0
         self.dataOffset = 0
         self.dataSize = 0
-        self.transformAnim = []
-        self.visibilityAnim = []
-        self.materialAnim = []
-        self.cameraAnim = []
+        self.animations = []
 
     def __repr__(self):
         return "Node name: " + str(self.name) + "\t| Type: " + str(self.type) + "\t| Flags: " + str(self.flags) + "\t| # of frames: " + str(self.frameCount) + "\t| Data offset: " + str(self.dataOffset) + "\t| Data size: " + str(self.dataSize) + "\n"
@@ -61,13 +22,8 @@ class AnimCompressedHeader:
         self.compressedDataOffset = 0
         self.frameCount = 0
 
-    def __init__(self, unk_4, flags, defaultDataOffset, bitsPerEntry, compressedDataOffset, frameCount):
-        self.unk_4 = unk_4 # always 4?
-        self.flags = flags
-        self.defaultDataOffset = defaultDataOffset
-        self.bitsPerEntry = bitsPerEntry
-        self.compressedDataOffset = compressedDataOffset
-        self.frameCount = frameCount
+    def __repr__(self):
+        return "Flags: " + str(self.flags) + "\t| Bits/entry: " + str(self.bitsPerEntry) + "\t| Data offset: " + str(self.compressedDataOffset) + "\t| Frame count: " + str(self.frameCount) + "\n"
 
 class AnimCompressedItem:
     def __init__(self):
@@ -79,6 +35,9 @@ class AnimCompressedItem:
         self.start = start
         self.end = end
         self.count = count
+
+    def __repr__(self):
+        return "Start: " + str(self.start) + "\t| End: " + str(self.end) + "\t| Count: " + str(self.count) + "\n"
 
 class AnimType(enum.Enum):
     Transform = 1
@@ -94,7 +53,7 @@ class AnimTrackFlags(enum.Enum):
     Boolean = 8
     Vector4 = 9
     Direct = 256
-    ConstTramsform = 512
+    ConstTransform = 512
     Compressed = 1024
     Constant = 1280
     # Use 65280 or 0xff00 when performing a bitwise 'and' on a flag
@@ -106,6 +65,31 @@ def readVarLenString(file):
         nameBuffer.append(str(file.read(1).decode("utf-8", "ignore")))
     del nameBuffer[-1]
     return ''.join(nameBuffer)
+
+def readBits(buffer, bitCount):
+    b = buffer.read(1) # Peek at next byte
+    buffer.seek(-1, 1) # Go back to previous byte
+    value = 0
+    LE = 0
+    bitIndex = 0
+    for i in range(bitCount):
+        bit = (b & (0x1 << bitPosition)) >> bitPosition
+        value = value | (bit << (LE + bitIndex))
+        bitPosition += 1
+        bitIndex += 1
+        if (bitPosition >= 8):
+            bitPosition = 0
+            b = buffer.read(2) # Peek at next two bytes
+            buffer.seek(-1, 1) # Go back to previous byte
+
+        if (bitIndex >= 8):
+            bitIndex = 0;
+            if ((LE + 8) > bitCount):
+                LE = bitCount - 1
+            else:
+                LE += 8
+
+    return value
 
 def getAnimationInfo(animpath):
     global AnimName; AnimName = ""
@@ -131,9 +115,9 @@ def getAnimationInfo(animpath):
                 AnimNameOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                 GroupOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                 GroupCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                Buffer1 = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                Buffer2 = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                print("GroupOffset: " + str(GroupOffset) + " | " + "GroupCount: " + str(GroupCount) + " | " + "Buffer1: " + str(Buffer1) + " | " + "Buffer2: " + str(Buffer2))
+                BufferOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                BufferSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                print("GroupOffset: " + str(GroupOffset) + " | " + "GroupCount: " + str(GroupCount) + " | " + "BufferOffset: " + str(BufferOffset) + " | " + "BufferSize: " + str(BufferSize))
                 am.seek(AnimNameOffset, 0)
                 AnimName = readVarLenString(am); am.seek(0x04, 1)
                 print("AnimName: " + AnimName)
@@ -151,7 +135,7 @@ def getAnimationInfo(animpath):
                         NodeNameOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                         NodeDataOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                         NextNodePos = am.tell() + struct.unpack('<L', am.read(4))[0] + 0x07
-                        print("NodeNameOffset: " + str(NodeNameOffset) + " | " + "NodeDataOffset: " + str(NodeDataOffset) + " | " + "NextNodePos: " + str(NextNodePos))
+                        #print("NodeNameOffset: " + str(NodeNameOffset) + " | " + "NodeDataOffset: " + str(NodeDataOffset) + " | " + "NextNodePos: " + str(NextNodePos))
                         am.seek(NodeNameOffset, 0)
                         at = AnimTrack()
                         at.name = readVarLenString(am)
@@ -168,7 +152,8 @@ def getAnimationInfo(animpath):
                     print("---------")
                     am.seek(NextGroupPos, 0)
                 print(AnimGroups)
-                readAnimations(am)
+                am.seek(BufferOffset, 0) # This must happen or all data will be read incorrectly
+                readAnimations(io.BytesIO(am.read(BufferSize)))
             else:
                 raise RuntimeError("%s is not a valid NUANMB file." % filepath)
 
@@ -177,41 +162,17 @@ def readAnimations(ao):
         for track in ag[1]:
             ao.seek(track.dataOffset, 0)    
             # Collect the actual data pertaining to every node
-            if (ag[0] == AnimType.Material.value):
-                if ((track.flags & 0xff00) == AnimTrackFlags.Constant.value or (track.flags & 0xff00) == AnimTrackFlags.ConstTramsform.value):
-                    track.materialAnim.append(readDirectData(ao, track))
-                if ((track.flags & 0xff00) == AnimTrackFlags.Direct.value):
-                    for t in range(track.frameCount):
-                        track.materialAnim.append(readDirect(ao, track))
-                if ((track.flags & 0xff00) == AnimTrackFlags.Compressed.value):
-                    readCompressedData(ao, track)
-                print(track.name + " | " + AnimType.Material.name)
-                #print(track.materialAnim)
+            if ((track.flags & 0xff00) == AnimTrackFlags.Constant.value or (track.flags & 0xff00) == AnimTrackFlags.ConstTransform.value):
+                readDirectData(ao, track)
+            if ((track.flags & 0xff00) == AnimTrackFlags.Direct.value):
+                for t in range(track.frameCount):
+                    readDirect(ao, track)
+            if ((track.flags & 0xff00) == AnimTrackFlags.Compressed.value):
+                readCompressedData(ao, track)
+            print(track.name + " | " + AnimType(ag[0]).name)
+            print(track.animations)
 
-            elif (ag[0] == AnimType.Visibility.value):
-                if ((track.flags & 0xff00) == AnimTrackFlags.Constant.value or (track.flags & 0xff00) == AnimTrackFlags.ConstTramsform.value):
-                    track.visibilityAnim.append(readDirectData(ao, track))
-                if ((track.flags & 0xff00) == AnimTrackFlags.Direct.value):
-                    for t in range(track.frameCount):
-                        track.visibilityAnim.append(readDirect(ao, track))
-                if ((track.flags & 0xff00) == AnimTrackFlags.Compressed.value):
-                    readCompressedData(ao, track)
-                print(track.name + " | " + AnimType.Visibility.name)
-                #print(track.visibilityAnim)
-
-            elif (ag[0] == AnimType.Transform.value):
-                if ((track.flags & 0xff00) == AnimTrackFlags.Constant.value or (track.flags & 0xff00) == AnimTrackFlags.ConstTramsform.value):
-                    track.transformAnim.append(readDirectData(ao, track))
-                if ((track.flags & 0xff00) == AnimTrackFlags.Direct.value):
-                    for t in range(track.frameCount):
-                        track.transformAnim.append(readDirect(ao, track))
-                if ((track.flags & 0xff00) == AnimTrackFlags.Compressed.value):
-                    readCompressedData(ao, track)
-                print(track.name + " | " + AnimType.Transform.name)
-                #print(track.transformAnim)
-
-            elif (ag[0] == AnimType.Camera.value):
-                print("Camera data extraction not yet implemented")
+    ao.close()
 
 def readDirectData(aq, track):
     if ((track.flags & 0x00ff) == AnimTrackFlags.Transform.value):
@@ -221,22 +182,67 @@ def readDirectData(aq, track):
         rx = struct.unpack('<f', aq.read(4))[0]; ry = struct.unpack('<f', aq.read(4))[0]; rz = struct.unpack('<f', aq.read(4))[0]; rw = struct.unpack('<f', aq.read(4))[0]
         # Position [X, Y, Z]
         px = struct.unpack('<f', aq.read(4))[0]; py = struct.unpack('<f', aq.read(4))[0]; pz = struct.unpack('<f', aq.read(4))[0]
-        return [[px, py, pz], [rx, ry, rz, rw], [sx, sy, sz]]
+        track.animations.append([[px, py, pz], [rx, ry, rz, rw], [sx, sy, sz]])
+
     if ((track.flags & 0x00ff) == AnimTrackFlags.Texture.value):
         pass
+
     if ((track.flags & 0x00ff) == AnimTrackFlags.Float.value):
-        return struct.unpack('<f', aq.read(4))[0]
+        track.animations.append(struct.unpack('<f', aq.read(4))[0])
+
     if ((track.flags & 0x00ff) == AnimTrackFlags.PatternIndex.value):
         pass
+
     if ((track.flags & 0x00ff) == AnimTrackFlags.Boolean):
-        return struct.unpack('<B', aq.read(1))[0] == 1
+        track.animations.append(struct.unpack('<B', aq.read(1))[0] == 1)
+
     if ((track.flags & 0x00ff) == AnimTrackFlags.Vector4):
         # [X, Y, Z, W]
         x = struct.unpack('<f', aq.read(4))[0]; y = struct.unpack('<f', aq.read(4))[0]; z = struct.unpack('<f', aq.read(4))[0]; w = struct.unpack('<f', aq.read(4))[0]
-        return [x, y, z, w]
+        track.animations.append([x, y, z, w])
 
 def readCompressedData(aq, track):
-    print("Compressed data extraction not yet implemented")
+    ach = AnimCompressedHeader()
+    ach.unk_4 = struct.unpack('<H', aq.read(2))[0]
+    ach.flags = struct.unpack('<H', aq.read(2))[0]
+    ach.defaultDataOffset = struct.unpack('<H', aq.read(2))[0]
+    ach.bitsPerEntry = struct.unpack('<H', aq.read(2))[0]
+    ach.compressedDataOffset = struct.unpack('<L', aq.read(4))[0]
+    ach.frameCount = struct.unpack('<L', aq.read(4))[0]
+    print(ach)
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Transform.value):
+        acj = [] # Contains an array of AnimCompressedItem objects
+        for i in range(9):
+            Start = struct.unpack('<f', aq.read(4))[0]
+            End = struct.unpack('<f', aq.read(4))[0]
+            Count = struct.unpack('<L', aq.read(4))[0]; aq.seek(0x04, 1)
+            aci = AnimCompressedItem(Start, End, Count)
+            acj.append(aci)
+        print(acj)
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Texture.value):
+        print("Compressed texture data extraction not yet implemented")
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Float.value):
+        print("Compressed float data extraction not yet implemented")
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.PatternIndex.value):
+        print("Compressed pattern index data extraction not yet implemented")
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Boolean):
+        aq.seek(track.dataOffset + ach.compressedDataOffset, 0)
+        for t in range(ach.frameCount):
+            track.animations.append(readBits(aq, ach.bitsPerEntry) == 1)
+
+    if ((track.flags & 0x00ff) == AnimTrackFlags.Vector4):
+        acj = [] # Contains an array of AnimCompressedItem objects
+        for i in range(4):
+            Start = struct.unpack('<f', aq.read(4))[0]
+            End = struct.unpack('<f', aq.read(4))[0]
+            Count = struct.unpack('<L', aq.read(4))[0]; aq.seek(0x04, 1)
+            aci = AnimCompressedItem(Start, End, Count)
+            acj.append(aci)
+        print(acj) 
 
 animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a00wait1.nuanmb"
 #animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a01turn.nuanmb"
