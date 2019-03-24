@@ -31,6 +31,9 @@ This set of two scripts requires Blender 2.70 or later, but only 2.79 has been t
 2. Only if importing NUANMB files, select the armature (skeleton) for the target model before importing them.
 3. Select `NUMDLB Import` or `NUANMB Import`, depending on what was selected earlier.
 
+## Extras
+In the *extras* directory are some more scripts. The original MAXScript, a mesh cleanup script, and data read-only scripts can be found here. The data read-only scripts require Blender like the importer scripts do, but they do not require the UI to be open. To run these scripts, type this into a terminal window/command prompt: `blender --background  --python <path-to-script>`, where `blender` may need to be replaced by the full executable path depending on how Blender was installed.
+
 ## Credits
 * The NUMDLB importer uses helper functions from the SuperTuxKart SPM importer at <https://sourceforge.net/p/supertuxkart/code/HEAD/tree/media/trunk/blender_26/spm_import.py>.
 * Parts of the Python scripts reference snippets of code from <http://steamreview.org/BlenderSourceTools/>.

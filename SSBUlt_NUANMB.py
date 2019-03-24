@@ -229,7 +229,7 @@ def readDirectData(aq, track):
         rx = struct.unpack('<f', aq.read(4))[0]; ry = struct.unpack('<f', aq.read(4))[0]; rz = struct.unpack('<f', aq.read(4))[0]; rw = struct.unpack('<f', aq.read(4))[0]
         # Position [X, Y, Z]
         px = struct.unpack('<f', aq.read(4))[0]; py = struct.unpack('<f', aq.read(4))[0]; pz = struct.unpack('<f', aq.read(4))[0]
-        track.animations.append(mathutils.Matrix([[px, py, pz], [rx, ry, rz, rw], [sx, sy, sz]]))
+        track.animations.append(mathutils.Matrix([[px, py, pz, 0], [rx, ry, rz, rw], [sx, sy, sz, 0]]))
 
     if ((track.flags & 0x00ff) == AnimTrackFlags.Texture.value):
         pass

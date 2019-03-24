@@ -1,4 +1,4 @@
-import io, os, struct, sys, time
+import io, mathutils, os, struct, sys, time
 
 def reinterpretCastIntToFloat(int_val):
     return struct.unpack('f', struct.pack('I', int_val))[0]
@@ -135,8 +135,6 @@ def getModelInfo(filepath):
         with open(filepath, 'rb') as md:
             global dirPath
             dirPath = os.path.dirname(filepath)
-            #struct MODLStruct (MSHGrpName, MSHMatName)
-
             md.seek(0x10, 0)
             # Reads the model file to find information about the other files
             MODLCheck = struct.unpack('<L', md.read(4))[0]
@@ -178,7 +176,6 @@ def getModelInfo(filepath):
                     meshGroupName = readVarLenString(md)
                     md.seek(MSHMatNameOff, 0)
                     meshMaterialName = readVarLenString(md)
-                    # append MODLGrp_array (MODLStruct MSHGrpName:MSHGrpName MSHMatName:MSHMatName)
                     if meshGroupName in MODLGrp_array:
                         nameCounter += 1
                         MODLGrp_array[meshGroupName + str(nameCounter * .001)[1:]] = meshMaterialName
@@ -192,8 +189,6 @@ def getModelInfo(filepath):
 # Imports the materials
 def importMaterials(MATName):
     with open(MATName, 'rb') as mt:
-        # struct MatStruct (MatName, MatColName, MatCol2Name, MatBakeName, MatNorName, MatEmiName, atEmi2Name, MatPrmName, MatEnvName)
-
         mt.seek(0x10, 0)
         MATCheck = struct.unpack('<L', mt.read(4))[0]
         if (MATCheck == 0x4D41544C):
@@ -314,13 +309,14 @@ def importSkeleton(SKTName):
                 m11 = struct.unpack('<f', b.read(4))[0]; m12 = struct.unpack('<f', b.read(4))[0]; m13 = struct.unpack('<f', b.read(4))[0]; m14 = struct.unpack('<f', b.read(4))[0]
                 m21 = struct.unpack('<f', b.read(4))[0]; m22 = struct.unpack('<f', b.read(4))[0]; m23 = struct.unpack('<f', b.read(4))[0]; m24 = struct.unpack('<f', b.read(4))[0]
                 m31 = struct.unpack('<f', b.read(4))[0]; m32 = struct.unpack('<f', b.read(4))[0]; m33 = struct.unpack('<f', b.read(4))[0]; m34 = struct.unpack('<f', b.read(4))[0]
-                m41 = struct.unpack('<f', b.read(4))[0]; m42 = struct.unpack('<f', b.read(4))[0]; m43 = struct.unpack('<f', b.read(4))[0]; m44 = struct.unpack('<f', b.read(4))[0]
-                tfm = [[m11, m21, m31, m41], [m12, m22, m32, m42], [m13, m23, m33, m43], [m14, m24, m34, m44]]
+                m41 = struct.unpack('<f', b.read(4))[0]; m42 = struct.unpack('<f', b.read(4))[0]; m43 = struct.unpack('<f', b.read(4))[0]; m44 = struct.unpack('<f', b.read(4))[0]        
+                tfm = mathutils.Matrix([[m11, m21, m31, m41], [m12, m22, m32, m42], [m13, m23, m33, m43], [m14, m24, m34, m44]])
+                BoneTrsArray[BoneName_array[c]] = tfm
                 if print_debug_info:
                     print("Matrix for " + BoneName_array[c] + ":\n" + str(tfm))
+                    print(tfm.decompose())
 
                 BoneArray.append(BoneName_array[c])
-                BoneTrsArray.append(tfm)
                 if (BoneParent_array[c] != 65535):
                     print(BoneName_array[BoneParent_array[c]])
 
@@ -328,10 +324,6 @@ def importSkeleton(SKTName):
 def importMeshes(MSHName):
     with open(MSHName, 'rb') as f:
         time_start = time.time()
-        # struct weight_data (boneids, weights)
-        # struct PolyGrpStruct (VisGrpName, SingleBindName, FacepointCount, FacepointStart, FaceLongBit, VertCount, VertStart, VertStride, UVStart, UVStride, BuffParamStart, BuffParamCount)
-        # struct WeightGrpStruct (GrpName, SubGroupNum, WeightInfMax, WeightFlag2, WeightFlag3, WeightFlag4, RigInfOffset, RigInfCount)
-
         f.seek(0x10, 0)
         MSHCheck = struct.unpack('<L', f.read(4))[0]
         if (MSHCheck == 0x4D455348):
@@ -655,7 +647,7 @@ def importMeshes(MSHName):
                         for b in range(len(Vert_array)):
                             Weight_array.append(weight_data([1], [1.0]))
 
-                print(Weight_array)
+                #print(Weight_array)
                 #print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
                 #print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
 
