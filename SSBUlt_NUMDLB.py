@@ -64,7 +64,7 @@ def decompressHalfFloat(bytes):
         f = f << 13
         return reinterpretCastIntToFloat(int((s << 31) | (e << 23) | f))
 
-class MatStruct:
+class MaterialData:
     def __init__(self):
         self.materialName = ""
         self.color1Name = ""
@@ -79,7 +79,7 @@ class MatStruct:
     def __repr__(self):
         return "Material name: " + str(self.materialName) + "\t| Color 1 name: " + str(self.color1Name) + "\t| Color 2 name: " + str(self.color2Name) + "\t| Bake name: " + str(self.bakeName) + "\t| Normal name: " + str(self.normalName) + "\t| Emissive 1 name: " + str(self.emissive1Name) + "\t| Emissive 2 name: " + str(self.emissive2Name) + "\t| PRM name: " + str(self.prmName) + "\t| Env name: " + str(self.envName) + "\n"
 
-class weight_data:
+class WeightData:
     def __init__(self):
         self.boneIDs = []
         self.weights = []
@@ -91,7 +91,7 @@ class weight_data:
     def __repr__(self):
         return "Bone IDs: " + str(self.boneIDs) + "\t| Weights: " + str(self.weights) + "\n"
 
-class PolyGrpStruct:
+class PolygonGroupData:
     def __init__(self):
         self.visGroupName = ""
         self.singleBindName = ""
@@ -109,7 +109,7 @@ class PolyGrpStruct:
     def __repr__(self):
         return "Vis group name: " + str(self.visGroupName) + "\t| Single bind name: " + str(self.singleBindName) + "\t| Facepoint count: " + str(self.facepointCount) + "\t| Facepoint start: " + str(self.facepointStart) + "\t| Face long bit: " + str(self.faceLongBit) + "\t| Vertice count: " + str(self.verticeCount) + "\t| Vertice start " + str(self.verticeStart) + "\t| Vertice stride: " + str(self.verticeStride) + "\t| UV start: " + str(self.UVStart) + "\t| UV stride: " + str(self.UVStride) + "\t| Buffer parameter start: " + str(self.bufferParamStart) + "\t| Buffer parameter count: " + str(self.bufferParamCount) + "\n"
 
-class WeightGrpStruct:
+class WeightGroupData:
     def __init__(self):
         self.groupName = ""
         self.subGroupNum = 0
@@ -223,7 +223,7 @@ def importMaterials(context, MATName, image_transparency=True, texture_ext=".png
             MATCount = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
             mt.seek(MATHeadOff, 0)
             for m in range(MATCount):
-                pe = MatStruct()
+                pe = MaterialData()
                 MATNameOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
                 MATParamGrpOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
                 MATParamGrpCount = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
@@ -448,7 +448,7 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
             f.seek(PolyGrpInfOffset, 0)
             nameCounter = 0
             for g in range(PolyGrpCount):
-                ge = PolyGrpStruct()
+                ge = PolygonGroupData()
                 VisGrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 f.seek(0x04, 1)
                 Unk1 = struct.unpack('<L', f.read(4))[0]
@@ -500,7 +500,7 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
             f.seek(WeightBuffOffset, 0)
             nameCounter = 0
             for b in range(WeightCount):
-                be = WeightGrpStruct()
+                be = WeightGroupData()
                 GrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 be.subGroupNum = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 be.weightInfMax = struct.unpack('<B', f.read(1))[0]
@@ -720,10 +720,10 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                             SingleBindID = b
 
                     for b in range(len(Vert_array)):
-                        Weight_array.append(weight_data([SingleBindID], [1.0]))
+                        Weight_array.append(WeightData([SingleBindID], [1.0]))
                 else:
                     for b in range(len(Vert_array)):
-                        Weight_array.append(weight_data([], []))
+                        Weight_array.append(WeightData([], []))
 
                     RigSet = 1
                     for b in range(len(WeightGrp_array)):
@@ -764,7 +764,7 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                         print(PolyGrp_array[p].visGroupName + " has no influences! Treating as a root singlebind instead.")
                         Weight_array = []
                         for b in range(len(Vert_array)):
-                            Weight_array.append(weight_data([1], [1.0]))
+                            Weight_array.append(WeightData([1], [1.0]))
 
                     # print(Weight_array)
 
