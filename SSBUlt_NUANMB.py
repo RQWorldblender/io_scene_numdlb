@@ -204,13 +204,13 @@ def readDirectData(aq, track):
         """
 
     if ((track.flags & 0x00ff) == AnimTrackFlags.Texture.value):
-        pass
+        print("Direct texture data extraction not yet implemented")
 
     if ((track.flags & 0x00ff) == AnimTrackFlags.Float.value):
         track.animations.append(struct.unpack('<f', aq.read(4))[0])
 
     if ((track.flags & 0x00ff) == AnimTrackFlags.PatternIndex.value):
-        pass
+        print("Direct pattern index data extraction not yet implemented")
 
     if ((track.flags & 0x00ff) == AnimTrackFlags.Boolean):
         track.animations.append(struct.unpack('<B', aq.read(1))[0] == 1)
