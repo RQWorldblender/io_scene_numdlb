@@ -9,7 +9,7 @@ Tooltip: 'Import *.NUMDLB (.numdlb)'
 
 __author__ = ["Richard Qian (Worldblender)", "Random Talking Bush", "Ploaj"]
 __url__ = ["https://gitlab.com/Worldblender/io_scene_numdlb"]
-__version__ = "0.1"
+__version__ = "1.0.0"
 __bpydoc__ = """\
 """
 
@@ -17,7 +17,7 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Model Importer",
     "description": "Imports data referenced by NUMDLB files (binary model format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Random Talking Bush, Ploaj",
-    "version": (0,1),
+    "version": (1,0,0),
     "blender": (2, 7, 0),
     "api": 31236,
     "location": "File > Import",
@@ -75,7 +75,7 @@ class MaterialData:
         self.emissive2Name = ""
         self.prmName = ""
         self.envName = ""
-    
+
     def __repr__(self):
         return "Material name: " + str(self.materialName) + "\t| Color 1 name: " + str(self.color1Name) + "\t| Color 2 name: " + str(self.color2Name) + "\t| Bake name: " + str(self.bakeName) + "\t| Normal name: " + str(self.normalName) + "\t| Emissive 1 name: " + str(self.emissive1Name) + "\t| Emissive 2 name: " + str(self.emissive2Name) + "\t| PRM name: " + str(self.prmName) + "\t| Env name: " + str(self.envName) + "\n"
 
@@ -105,7 +105,7 @@ class PolygonGroupData:
         self.UVStride = 0
         self.bufferParamStart = 0
         self.bufferParamCount = 0
-    
+
     def __repr__(self):
         return "Vis group name: " + str(self.visGroupName) + "\t| Single bind name: " + str(self.singleBindName) + "\t| Facepoint count: " + str(self.facepointCount) + "\t| Facepoint start: " + str(self.facepointStart) + "\t| Face long bit: " + str(self.faceLongBit) + "\t| Vertice count: " + str(self.verticeCount) + "\t| Vertice start " + str(self.verticeStart) + "\t| Vertice stride: " + str(self.verticeStride) + "\t| UV start: " + str(self.UVStart) + "\t| UV stride: " + str(self.UVStride) + "\t| Buffer parameter start: " + str(self.bufferParamStart) + "\t| Buffer parameter count: " + str(self.bufferParamCount) + "\n"
 
@@ -119,14 +119,14 @@ class WeightGroupData:
         self.weightFlag4 = 0
         self.rigInfOffset = 0
         self.rigInfCount =  0
-    
+
     def __repr__(self):
         return str(self.groupName) + "\t| Subgroup #: " + str(self.subGroupNum) + "\t| Weight info max: " + str(self.weightInfMax) + "\t| Weight flags: " + str(self.weightFlag2) + ", " + str(self.weightFlag3) + ", " + str(self.weightFlag4) + "\t| Rig info offset: " + str(self.rigInfOffset) + "\t| Rig info count: " + str(self.rigInfCount) + "\n"
 
-def findUVImageForMesh(matNameQuery, useUVMap2):
+def findUVImage(matNameQuery, UVMapID=0):
     for mat in Materials_array:
         if (mat.materialName == matNameQuery):
-            if useUVMap2:
+            if (UVMapID > 0):
                 return mat.color2Name
             else:
                 return mat.color1Name
@@ -139,7 +139,7 @@ def readVarLenString(file):
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
-def getModelInfo(context, filepath, image_transparency=True, texture_ext=".png", use_vertex_colors=True, use_uv_maps=True, remove_doubles=False, connect_bones=False, auto_rotate=False):
+def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles, connect_bones, create_rest_action, auto_rotate):
     # Semi-global variables used by this function's hierarchy; cleared every time this function runs
     global dirPath; dirPath = ""
     global MODLName; MODLName = ""
@@ -149,7 +149,7 @@ def getModelInfo(context, filepath, image_transparency=True, texture_ext=".png",
     global skelName; skelName = ""
     global MODLGrp_array; MODLGrp_array = {}
     global Materials_array; Materials_array = []
-    
+
     if os.path.isfile(filepath):
         with open(filepath, 'rb') as md:
             dirPath = os.path.dirname(filepath)
@@ -196,23 +196,23 @@ def getModelInfo(context, filepath, image_transparency=True, texture_ext=".png",
                 print(MODLGrp_array)
             else:
                 raise RuntimeError("%s is not a valid NUMDLB file." % filepath)
-        
+
         if os.path.isfile(MATName):
-            importMaterials(context, MATName, image_transparency, texture_ext)
+            importMaterials(MATName, image_transparency, texture_ext)
         if os.path.isfile(SKTName):
-            importSkeleton(context, SKTName, connect_bones)
+            importSkeleton(context, SKTName, connect_bones, create_rest_action)
         if os.path.isfile(MSHName):
             importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles)
-        
+
         # Rotate armature if option is enabled
         if auto_rotate:
             bpy.ops.object.select_all(action='TOGGLE')
             bpy.ops.object.select_pattern(pattern="*Armature*")
             bpy.ops.transform.rotate(value=math.radians(90), axis=(1, 0, 0), constraint_axis=(True, False, False), constraint_orientation='GLOBAL', mirror=False, proportional='DISABLED', proportional_edit_falloff='SMOOTH', proportional_size=1)
             bpy.ops.object.select_all(action='TOGGLE')
-        
+
 # Imports the materials
-def importMaterials(context, MATName, image_transparency=True, texture_ext=".png"):
+def importMaterials(MATName, image_transparency, texture_ext):
     with open(MATName, 'rb') as mt:
         mt.seek(0x10, 0)
         MATCheck = struct.unpack('<L', mt.read(4))[0]
@@ -293,7 +293,7 @@ def importMaterials(context, MATName, image_transparency=True, texture_ext=".png
                 # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
                 if (Materials_array[m].color1Name != ""):
                     if (bpy.data.textures.find(Materials_array[m].color1Name) > 0):
-                        
+
                         tex = bpy.data.textures[Materials_array[m].color1Name]
                     else:
                         tex = bpy.data.textures.new(Materials_array[m].color1Name, type='IMAGE')
@@ -327,7 +327,7 @@ def importMaterials(context, MATName, image_transparency=True, texture_ext=".png
         print(Materials_array)
 
 # Imports the skeleton
-def importSkeleton(context, SKTName, connect_bones=False):
+def importSkeleton(context, SKTName, connect_bones=False, create_rest_action=True):
     BoneCount = 0
     BoneParent_array = []
     BoneName_array = []
@@ -377,12 +377,14 @@ def importSkeleton(context, SKTName, connect_bones=False):
             armaName = skel.data.name
             skel.data.draw_type = 'STICK'
             skel.show_x_ray = True
-            bpy.context.scene.objects.link(skel)
+
+            context.scene.objects.link(skel)
             for i in bpy.context.selected_objects:
                 i.select = False
             skel.select = True
-            bpy.context.scene.objects.active = skel
+            context.scene.objects.active = skel
             bpy.ops.object.mode_set(mode='EDIT', toggle=False)
+
             for c in range(BoneCount):
                 # Matrix format is [X, Y, Z, W]
                 m11 = struct.unpack('<f', b.read(4))[0]; m12 = struct.unpack('<f', b.read(4))[0]; m13 = struct.unpack('<f', b.read(4))[0]; m14 = struct.unpack('<f', b.read(4))[0]
@@ -418,10 +420,84 @@ def importSkeleton(context, SKTName, connect_bones=False):
                     # The parent bone, named "Trans", must a be non-zero length, or Blender will eventually remove it
                     currBone.tail = (currBone.head.x, currBone.head.y + 0.01, currBone.head.z)
 
+            if create_rest_action:
+                # Enter pose mode, and then create an action containing the rest pose if enabled
+                bpy.ops.object.mode_set(mode='POSE', toggle=False)
+                actionName = MODLName + "-rest"
+                action = bpy.data.actions.new(actionName)
+
+                try:
+                    skel.animation_data.action
+                except:
+                    skel.animation_data_create()
+
+                skel.animation_data.action = action
+                context.scene.frame_current = context.scene.frame_start # Jump to beginning of new action
+                context.scene.timeline_markers.new(actionName)
+
+                for bone in skel.pose.bones:
+                    bone.matrix_basis.identity()
+                    bone.rotation_mode = 'QUATERNION'
+                    curvesPos = []
+                    curvesRot = []
+                    curvesSca = []
+                    """
+                    List of fcurve types:
+                    * 'location'
+                    * 'rotation_euler'
+                    * 'rotation_quaternion'
+                    * 'scale'
+                    """
+
+                    # Try to set the bone matrix with rotation component here
+                    # bone.matrix = BoneTrsArray[bone.name]
+
+                    # First, create position keyframes
+                    for pi in range(3):
+                            curvesPos.append(action.fcurves.new(data_path='pose.bones["%s"].%s' %
+                                   (bone.name, "location"),
+                                   index=pi,
+                                   action_group=bone.name))
+
+                    for axis, fcurve in enumerate(curvesPos):
+                        fcurve.color_mode = 'AUTO_RGB'
+                        fcurve.keyframe_points.add(1)
+                        fcurve.keyframe_points[-1].co = [context.scene.frame_current, bone.location[axis]]
+                        fcurve.keyframe_points[-1].interpolation = 'LINEAR'
+                        fcurve.update()
+
+                    # Next, create rotation keyframes
+                    for ri in range(4):
+                            curvesRot.append(action.fcurves.new(data_path='pose.bones["%s"].%s' %
+                                   (bone.name, "rotation_quaternion"),
+                                   index=ri,
+                                   action_group=bone.name))
+
+                    for axis, fcurve in enumerate(curvesRot):
+                        fcurve.color_mode = 'AUTO_YRGB'
+                        fcurve.keyframe_points.add(1)
+                        fcurve.keyframe_points[-1].co = [context.scene.frame_current, bone.rotation_quaternion[axis]]
+                        fcurve.keyframe_points[-1].interpolation = 'LINEAR'
+                        fcurve.update()
+
+                    # Last, create scale keyframes
+                    for si in range(3):
+                            curvesSca.append(action.fcurves.new(data_path='pose.bones["%s"].%s' %
+                                   (bone.name, "scale"),
+                                   index=si,
+                                   action_group=bone.name))
+
+                    for axis, fcurve in enumerate(curvesSca):
+                        fcurve.color_mode = 'AUTO_RGB'
+                        fcurve.keyframe_points.add(1)
+                        fcurve.keyframe_points[-1].co = [context.scene.frame_current, bone.scale[axis]]
+                        fcurve.keyframe_points[-1].interpolation = 'LINEAR'
+                        fcurve.update()
+
             bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
 # Imports the meshes
-def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, use_uv_maps=True, remove_doubles=False):
+def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles):
     PolyGrp_array = []
     WeightGrp_array = []
 
@@ -523,6 +599,7 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                 f.seek(WeightRet, 0)
 
             print(WeightGrp_array)
+
             # Repeats for every mesh group
             for p in range(PolyGrpCount):
                 Vert_array = []
@@ -549,7 +626,7 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                     # In case material cannot be found
                     continue
                 mesh.use_auto_smooth = True
-                
+
                 for bone in bpy.data.armatures[armaName].bones.values():
                     obj.vertex_groups.new(bone.name)
                 modifier = obj.modifiers.new(armaName, type="ARMATURE")
@@ -562,7 +639,7 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
 
                 for v in range(PolyGrp_array[p].bufferParamCount):
                     BuffParamType = struct.unpack('<L', f.read(4))[0]
-                    BuffParamFmt = struct.unpack('<L', f.read(4))[0] + 1 # Adding one so that "0" counts as "none".
+                    BuffParamFmt = struct.unpack('<L', f.read(4))[0]
                     BuffParamSet = struct.unpack('<L', f.read(4))[0]
                     BuffParamOffset = struct.unpack('<L', f.read(4))[0]
                     BuffParamLayer = struct.unpack('<L', f.read(4))[0]
@@ -589,30 +666,29 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                     else:
                         raise RuntimeError("Unknown format!")
                     f.seek(BuffParamRet, 0)
+
                 # Read vertice data
                 print("Total number of vertices found: " + str(PolyGrp_array[p].verticeCount))
                 f.seek(VertOffStart + PolyGrp_array[p].verticeStart, 0)
 
                 print(PolyGrp_array[p].visGroupName + " Vert start: " + str(f.tell()))
                 for v in range(PolyGrp_array[p].verticeCount):
-                    if (PosFmt == 1):
+                    if (PosFmt == 0):
                         vx = struct.unpack('<f', f.read(4))[0]
                         vy = struct.unpack('<f', f.read(4))[0]
                         vz = struct.unpack('<f', f.read(4))[0]
                         Vert_array.append([vx,vy,vz])
-                        
                     else:
                         print("Unknown position format!")
-                    if (NormFmt == 6):
+                    if (NormFmt == 5):
                         nx = decompressHalfFloat(f.read(2))
                         ny = decompressHalfFloat(f.read(2))
                         nz = decompressHalfFloat(f.read(2))
                         nq = decompressHalfFloat(f.read(2))
                         Normal_array.append([nx,ny,nz])
-                        
                     else:
                         print("Unknown normals format!")
-                    if (TanFmt == 6):
+                    if (TanFmt == 5):
                         tanx = decompressHalfFloat(f.read(2))
                         tany = decompressHalfFloat(f.read(2))
                         tanz = decompressHalfFloat(f.read(2))
@@ -621,10 +697,8 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                         print("Unknown tangents format!")
 
                 print(PolyGrp_array[p].visGroupName + " Vert end: " + str(f.tell()))
-                
-                
-                f.seek(UVOffStart + PolyGrp_array[p].UVStart, 0)
 
+                f.seek(UVOffStart + PolyGrp_array[p].UVStart, 0)
                 print(PolyGrp_array[p].visGroupName + " UV start: " + str(f.tell()))
                 for v in range(PolyGrp_array[p].verticeCount):
                     # Read UV map data if option is enabled
@@ -649,8 +723,8 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                                             tu5 = decompressHalfFloat(f.read(2))
                                             tv5 = (decompressHalfFloat(f.read(2)) * -1) + 1
                                             UV5_array.append([tu5,tv5])
-                                        if (UVCount >= 6):
-                                            print("Importing more than 5 UV sets is not supported, not reading any more.")
+                                            if (UVCount >= 6):
+                                                print("Importing more than 5 UV sets is not supported, not reading any more.")
                         else:
                             UV_array.append([0,0])
                     # Read vertex color data if option is enabled
@@ -692,6 +766,7 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                             Alpha_array.append(1.0)
 
                 print(PolyGrp_array[p].visGroupName + " UV end: " + str(f.tell()))
+
                 # Read face data
                 f.seek(FaceBuffOffset + PolyGrp_array[p].facepointStart, 0)
                 print(PolyGrp_array[p].visGroupName + " Face start: " + str(f.tell()))
@@ -701,14 +776,11 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                         fb = struct.unpack('<H', f.read(2))[0] + 1
                         fc = struct.unpack('<H', f.read(2))[0] + 1
                         Face_array.append([fa,fb,fc])
-                        
-
                     elif (PolyGrp_array[p].faceLongBit == 1):
                         fa = struct.unpack('<L', f.read(4))[0] + 1
                         fb = struct.unpack('<L', f.read(4))[0] + 1
                         fc = struct.unpack('<L', f.read(4))[0] + 1
                         Face_array.append([fa,fb,fc])
-                        
                     else:
                         raise RuntimeError("Unknown face bit value!")
 
@@ -773,7 +845,7 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                 bm.from_mesh(mesh)
 
                 weight_layer = bm.verts.layers.deform.new()
-                
+
                 for vert in range(len(Vert_array)):
                     vertIndex = Vert_array.index(Vert_array[vert])
                     bmv = bm.verts.new(Vert_array[vert])
@@ -782,8 +854,7 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                     for j in range(len(Weight_array[vertIndex].boneIDs)):
                         bmv[weight_layer][Weight_array[vertIndex].boneIDs[j]] =  Weight_array[vertIndex].weights[j]
 
-                # Required after adding / removing vertices and before accessing them
-                # by index.
+                # Required after adding / removing vertices and before accessing them by index.
                 bm.verts.ensure_lookup_table()
                 # Required to actually retrieve the indices later on (or they stay -1).
                 bm.verts.index_update()
@@ -799,7 +870,7 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                         color_layer_4 = bm.loops.layers.color.new()
                     if (len(Color5_array) > 0):
                         color_layer_5 = bm.loops.layers.color.new()
-                
+
                 if (use_uv_maps and UVCount > 0):
                     if (len(UV_array) > 0):
                         uv_layer = bm.loops.layers.uv.new()
@@ -827,24 +898,6 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
                         # Face already exists
                         continue
 
-                    if (use_uv_maps and UVCount > 0):
-                            if (len(UV_array) > 0):
-                                # Looks like assigning images to UV maps via BMesh isn't supported for now, so disable doing anything here
-                                pass
-                                #print(type(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext))
-                                #face[tex_layer].image = bpy.data.images[findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext]
-                            if (len(UV2_array) > 0):
-                                pass
-                                #print((findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext))
-                                #face[tex_layer_2].image = bpy.data.images[findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext]
-                            """ Images can currently be linked only with the first 2 UV maps
-                            if (len(UV3_array) > 0):
-                                face[tex_layer_3].image = 
-                            if (len(UV4_array) > 0):
-                                face[tex_layer_4].image = 
-                            if (len(UV5_array) > 0):
-                                face[tex_layer_5].image = """
-                
                 for surface in bm.faces:
                     for loop in surface.loops:
                         if (use_vertex_colors and ColorCount > 0):
@@ -878,18 +931,23 @@ def importMeshes(context, MSHName, texture_ext=".png", use_vertex_colors=True, u
 
                 bm.to_mesh(mesh)
                 bm.free()
-                bpy.context.scene.objects.link(obj)
-                                
+                context.scene.objects.link(obj)
+
+                # Try to assign images to UV maps here
+                if (use_uv_maps and UVCount > 0):
+                    for id, uv_layer in enumerate(mesh.uv_textures):
+                        for poly in uv_layer.data:
+                            poly.image = bpy.data.images[findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], id) + texture_ext]
+
+                # Apply matrix transformation to single-binding meshes
                 if (PolyGrp_array[p].singleBindName != ""):
                     obj.matrix_world = BoneTrsArray[PolyGrp_array[p].singleBindName]
 
                 bpy.ops.object.select_all(action="DESELECT")
                 obj.select = True
-                bpy.context.scene.objects.active = obj
+                context.scene.objects.active = obj
                 bpy.ops.object.shade_smooth()
-                # bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
-
-        print("Done! Mesh import completed in " + str(round(time.time() - time_start, 3)) + " seconds.")
+                bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
 
 # ==== Import OPERATOR ====
 from bpy_extras.io_utils import (ImportHelper)
@@ -931,23 +989,45 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
             default=False,
             )
 
+    create_rest_action = bpy.props.BoolProperty(
+            name="Backup Rest Pose",
+            description="Create an action containing the rest pose",
+            default=True,
+            )
+
     auto_rotate = bpy.props.BoolProperty(
             name="Auto-Rotate Armature",
             description="Rotate the armature so that everything points up z-axis, instead of up y-axis",
             default=True,
             )
 
-    texture_ext = bpy.props.StringProperty(
+    texture_ext = bpy.props.EnumProperty(
             name="Texture File Extension",
             description="The file type to be associated with the texture names",
+            items=((".bmp", "BMP", "Windows Bitmap"),
+                   (".cin", "CIN", "Cineon"),
+                   (".dpx", "DPX", "Digital Moving Picture Exchange"),
+                   (".exr", "EXR", "OpenEXR"),
+                   (".hdr", "HDR", "High Dynamic Range"),
+                   (".jpg", "JPG", "Joint Photographic Expert Group"),
+                   (".jpeg", "JPEG", "Joint Photographic Expert Group"),
+                   (".jp2", "JP2", "Joint Photographic Expert Group 2000"),
+                   (".j2k", "J2K", "Joint Photographic Expert Group 2000"),
+                   (".png", "PNG", "Portable Network Graphics"),
+                   (".rgb", "RGB", "Iris"),
+                   (".tga", "TGA", "Targa"),
+                   (".tif", "TIF", "Tagged Image File Format"),
+                   (".tiff", "TIFF", "Tagged Image File Format")),
             default=".png",
             )
 
     def execute(self, context):
         keywords = self.as_keywords(ignore=("filter_glob",))
+        time_start = time.time()
         getModelInfo(context, **keywords)
-
         context.scene.update()
+
+        print("Done! Model import completed in " + str(round(time.time() - time_start, 4)) + " seconds.")
         return {"FINISHED"}
 
 # Add to a menu

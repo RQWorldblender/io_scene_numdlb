@@ -36,7 +36,7 @@ def decompressHalfFloat(bytes):
         f = f << 13
         return reinterpretCastIntToFloat(int((s << 31) | (e << 23) | f))
 
-class MatStruct:
+class MaterialData:
     def __init__(self):
         self.materialName = ""
         self.color1Name = ""
@@ -51,7 +51,7 @@ class MatStruct:
     def __repr__(self):
         return "Material name: " + str(self.materialName) + "\t| Color 1 name: " + str(self.color1Name) + "\t| Color 2 name: " + str(self.color2Name) + "\t| Bake name: " + str(self.bakeName) + "\t| Normal name: " + str(self.normalName) + "\t| Emissive 1 name: " + str(self.emissive1Name) + "\t| Emissive 2 name: " + str(self.emissive2Name) + "\t| PRM name: " + str(self.prmName) + "\t| Env name: " + str(self.envName) + "\n"
 
-class weight_data:
+class WeightData:
     def __init__(self):
         self.boneIDs = []
         self.weights = []
@@ -63,7 +63,7 @@ class weight_data:
     def __repr__(self):
         return "Bone IDs: " + str(self.boneIDs) + "\t| Weights: " + str(self.weights) + "\n"
 
-class PolyGrpStruct:
+class PolygonGroupData:
     def __init__(self):
         self.visGroupName = ""
         self.singleBindName = ""
@@ -81,7 +81,7 @@ class PolyGrpStruct:
     def __repr__(self):
         return "Vis group name: " + str(self.visGroupName) + "\t| Single bind name: " + str(self.singleBindName) + "\t| Facepoint count: " + str(self.facepointCount) + "\t| Facepoint start: " + str(self.facepointStart) + "\t| Face long bit: " + str(self.faceLongBit) + "\t| Vertice count: " + str(self.verticeCount) + "\t| Vertice start " + str(self.verticeStart) + "\t| Vertice stride: " + str(self.verticeStride) + "\t| UV start: " + str(self.UVStart) + "\t| UV stride: " + str(self.UVStride) + "\t| Buffer parameter start: " + str(self.bufferParamStart) + "\t| Buffer parameter count: " + str(self.bufferParamCount) + "\n"
 
-class WeightGrpStruct:
+class WeightGroupData:
     def __init__(self):
         self.groupName = ""
         self.subGroupNum = 0
@@ -105,7 +105,6 @@ MODLGrp_array = {}
 Materials_array = []
 BoneCount = 0
 BoneArray = ["Trans", "Rot"]
-BoneFixArray = []
 BoneTrsArray = {}
 BoneParent_array = []
 BoneName_array = []
@@ -114,7 +113,7 @@ WeightGrp_array = []
 print_debug_info = True
 texture_ext = ".png"
 
-def findUVImageForMesh(matNameQuery, useUVMap2):
+def findUVImage(matNameQuery, useUVMap2):
     for mat in Materials_array:
         if (mat.materialName == matNameQuery):
             if useUVMap2:
@@ -199,7 +198,7 @@ def importMaterials(MATName):
             mt.seek(MATHeadOff, 0)
             global Materials_array
             for m in range(MATCount):
-                pe = MatStruct()
+                pe = MaterialData()
                 MATNameOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
                 MATParamGrpOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
                 MATParamGrpCount = struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
@@ -323,7 +322,6 @@ def importSkeleton(SKTName):
 # Imports the meshes
 def importMeshes(MSHName):
     with open(MSHName, 'rb') as f:
-        time_start = time.time()
         f.seek(0x10, 0)
         MSHCheck = struct.unpack('<L', f.read(4))[0]
         if (MSHCheck == 0x4D455348):
@@ -344,7 +342,7 @@ def importMeshes(MSHName):
             global PolyGrp_array
             nameCounter = 0
             for g in range(PolyGrpCount):
-                ge = PolyGrpStruct()
+                ge = PolygonGroupData()
                 VisGrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 f.seek(0x04, 1)
                 Unk1 = struct.unpack('<L', f.read(4))[0]
@@ -399,7 +397,7 @@ def importMeshes(MSHName):
             global WeightGrp_array
             nameCounter = 0
             for b in range(WeightCount):
-                be = WeightGrpStruct()
+                be = WeightGroupData()
                 GrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 be.subGroupNum = struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 be.weightInfMax = struct.unpack('<B', f.read(1))[0]
@@ -440,7 +438,7 @@ def importMeshes(MSHName):
 
                 for v in range(PolyGrp_array[p].bufferParamCount):
                     BuffParamType = struct.unpack('<L', f.read(4))[0]
-                    BuffParamFmt = struct.unpack('<L', f.read(4))[0] + 1 # Adding one so that "0" counts as "none".
+                    BuffParamFmt = struct.unpack('<L', f.read(4))[0]
                     BuffParamSet = struct.unpack('<L', f.read(4))[0]
                     BuffParamOffset = struct.unpack('<L', f.read(4))[0]
                     BuffParamLayer = struct.unpack('<L', f.read(4))[0]
@@ -475,14 +473,14 @@ def importMeshes(MSHName):
                     print(PolyGrp_array[p].visGroupName + " Vert start: " + str(f.tell()))
                 #print("PosFmt: " + str(PosFmt) + " | NormFmt: " + str(NormFmt) + " | TanFmt: " + str(TanFmt))
                 for v in range(PolyGrp_array[p].verticeCount):
-                    if (PosFmt == 1):
+                    if (PosFmt == 0):
                         vx = struct.unpack('<f', f.read(4))[0]
                         vy = struct.unpack('<f', f.read(4))[0]
                         vz = struct.unpack('<f', f.read(4))[0]
                         Vert_array.append([vx,vy,vz])
                     else:
                         print("Unknown position format!")
-                    if (NormFmt == 6):
+                    if (NormFmt == 5):
                         nx = decompressHalfFloat(f.read(2))
                         ny = decompressHalfFloat(f.read(2))
                         nz = decompressHalfFloat(f.read(2))
@@ -490,7 +488,7 @@ def importMeshes(MSHName):
                         Normal_array.append([nx,ny,nz])
                     else:
                         print("Unknown normals format!")
-                    if (TanFmt == 6):
+                    if (TanFmt == 5):
                         tanx = decompressHalfFloat(f.read(2))
                         tany = decompressHalfFloat(f.read(2))
                         tanz = decompressHalfFloat(f.read(2))
@@ -599,16 +597,15 @@ def importMeshes(MSHName):
                            SingleBindID = b
 
                     for b in range(len(Vert_array)):
-                        Weight_array.append(weight_data([SingleBindID], [1.0]))
+                        Weight_array.append(WeightData([SingleBindID], [1.0]))
                 else:
                     for b in range(len(Vert_array)):
-                        Weight_array.append(weight_data([0], [0]))
+                        Weight_array.append(WeightData([0], [0]))
 
                     RigSet = 1
                     for b in range(len(WeightGrp_array)):
                             if (PolyGrp_array[p].visGroupName == WeightGrp_array[b].groupName):
                                 RigSet = b
-                                # WeightGrp_array[b].groupName = "" # Dumb fix due to shared group names but split entries, prevents crashing.
                                 break
                     # Read vertice/weight group data
                     f.seek(WeightGrp_array[RigSet].rigInfOffset, 0)
@@ -645,19 +642,19 @@ def importMeshes(MSHName):
                         print(PolyGrp_array[p].visGroupName + " has no influences! Treating as a root singlebind instead.")
                         Weight_array = []
                         for b in range(len(Vert_array)):
-                            Weight_array.append(weight_data([1], [1.0]))
+                            Weight_array.append(WeightData([1], [1.0]))
 
                 #print(Weight_array)
-                #print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
-                #print(findUVImageForMesh(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
+                #print(findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
+                #print(findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
 
-        print("Done! Mesh import completed in " + str(round(time.time() - time_start, 3)) + " seconds.")
+modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/body/c00/model.numdlb"
+#modelpath = "/opt/Smash Ultimate Models/fighter/packun/model/body/c00/model.numdlb"
 
-#modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/body/c00/model.numdlb"
-#modelpath = "/media/richard/3AEE25744CE0956E/Smash Ultimate Models/fighter/mario/model/body/c00/model.numdlb"
-modelpath = "/opt/Smash Ultimate Models/fighter/packun/model/body/c00/model.numdlb"
+time_start = time.time()
 getModelInfo(modelpath)
 
 importMaterials(MATName)
 importSkeleton(SKTName)
 importMeshes(MSHName)
+print("Done! Model import completed in " + str(round(time.time() - time_start, 4)) + " seconds.")

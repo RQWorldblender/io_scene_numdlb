@@ -1,10 +1,9 @@
 # Super Smash Bros. Ultimate model and animation importers for Blender (io_scene_numdlb)
-Imports data referenced by NUMDLB files and NUANMB files (binary model and animation formats used by some games developed by Bandai-Namco). May work for other games using the same format. Unlike the original MAXScript, this plugin is cross-platform, as it will work on any operating system that Blender and Python exist for. The readability in the rewritten script is also improved, with the main function split into several smaller ones.
+Imports data referenced by NUMDLB files and NUANMB files (binary model and animation formats used by some games developed by Bandai-Namco). May work for other games using the same format. Unlike the original MAXScript, this set of scripts is cross-platform, as they will work on any operating system that Blender and Python exist for. The readability in the rewritten model importer script is also improved, with the main function split into several smaller ones.
 
 **The model importer script is now ready for daily use, but the animation importer script is not yet (it can read some data, but not actually import it). There are a few limitations in the model importer script:**
 
 * Vertex colors are set, but the alpha channel is not used, as there is no way to set it within the Blender UI.
-* UV maps will import, but without images assigned to them. They must be assigned manually; use the material and texture information for hints on the images to assign to each mesh.
 * Bone roll is not calculated, so animations imported from files may cause meshes to deform incorrectly, although I'm working on a NUANMB importer in hopes of solving this problem.
 
 ## Where to obtain assets
@@ -49,11 +48,14 @@ This set of two scripts requires Blender 2.70 or later, but only 2.79 has been t
 
 3. Select `NUMDLB Import` or `NUANMB Import`, depending on what was selected earlier.
 
+4. If importing data from NUMDLB files, images are now assigned automatically to UV maps for all meshes if available. To display these images on meshes, switch the viewport shading option to 'Textured', or open the 3D View properties panel on the right, and select the 'Textured Solid' option in the 'Shading' subpanel.
+
 ## Extras
 In the *extras* directory are some more scripts. The original MAXScript, a mesh cleanup script, and data read-only scripts can be found here. The data read-only scripts require Blender like the importer scripts do, but they do not require the UI to be open. To run these scripts, type this into a terminal window/command prompt: `blender --background  --python <path-to-script>`, where `blender` may need to be replaced by the full executable path depending on how Blender was installed.
+An additional script at <https://github.com/virtualturtle/SSBU_BlenderEaseofImport> can assist in cleaning up meshes by sending expression-specific ones to other layers. I keep an altered copy here so that it can handle more situations than the original author provides.
 
 ## Credits
-* The contents of all copies of the file `bitio.py` here originate from <http://rosettacode.org/wiki/Bitwise_IO#Python> (via <https://stackoverflow.com/a/10691412>). Unlike the other scripts, it is licensed under [GNU Free Documentation License 1.2](https://www.gnu.org/licenses/fdl-1.2.html).
+* The contents of the file `bitio.py` here originate from <http://rosettacode.org/wiki/Bitwise_IO#Python> (via <https://stackoverflow.com/a/10691412>). Unlike the other scripts, it is licensed under [GNU Free Documentation License 1.2](https://www.gnu.org/licenses/fdl-1.2.html).
 
 * The NUMDLB importer uses helper functions from the SuperTuxKart SPM importer at <https://sourceforge.net/p/supertuxkart/code/HEAD/tree/media/trunk/blender_26/spm_import.py>.
 
@@ -64,4 +66,4 @@ In the *extras* directory are some more scripts. The original MAXScript, a mesh 
 * <https://github.com/Ploaj/SSBHLib> - used for checking whether my scripts read the original data correctly or not. The majority of the NUANMB importer references code from here as well.
 
 ## License
-Everything but the original MAXScript and all copies of `bitio.py` is licensed under the MIT License, found at <./LICENSE>.
+Everything but the original MAXScript and `bitio.py` is licensed under the MIT License, found at <./LICENSE>.
