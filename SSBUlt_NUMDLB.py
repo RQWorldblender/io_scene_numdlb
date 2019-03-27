@@ -425,15 +425,14 @@ def importSkeleton(context, SKTName, connect_bones=False, create_rest_action=Tru
                 bpy.ops.object.mode_set(mode='POSE', toggle=False)
                 actionName = MODLName + "-rest"
                 action = bpy.data.actions.new(actionName)
+                action.pose_markers.new(actionName)
 
-                try:
-                    skel.animation_data.action
-                except:
+                if (skel.animation_data.action == None):
                     skel.animation_data_create()
 
                 skel.animation_data.action = action
+                skel.animation_data.action.use_fake_user = True
                 context.scene.frame_current = context.scene.frame_start # Jump to beginning of new action
-                context.scene.timeline_markers.new(actionName)
 
                 for bone in skel.pose.bones:
                     bone.matrix_basis.identity()
@@ -448,9 +447,6 @@ def importSkeleton(context, SKTName, connect_bones=False, create_rest_action=Tru
                     * 'rotation_quaternion'
                     * 'scale'
                     """
-
-                    # Try to set the bone matrix with rotation component here
-                    # bone.matrix = BoneTrsArray[bone.name]
 
                     # First, create position keyframes
                     for pi in range(3):
