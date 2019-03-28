@@ -290,7 +290,7 @@ def importMaterials(MATName, image_transparency, texture_ext):
                 else:
                     mat = bpy.data.materials.new(Materials_array[m].materialName)
                 mat.specular_shader = 'PHONG'
-                mat.user_fake_user = True
+                mat.use_fake_user = True
                 # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
                 if (Materials_array[m].color1Name != ""):
                     if (bpy.data.textures.find(Materials_array[m].color1Name) > 0):
@@ -453,46 +453,22 @@ def importSkeleton(context, SKTName, connect_bones=False, create_rest_action=Tru
                     """
 
                     # First, create position keyframes
-                    for pi in range(3):
-                            curvesPos.append(action.fcurves.new(data_path='pose.bones["%s"].%s' %
-                                   (bone.name, "location"),
-                                   index=pi,
-                                   action_group=bone.name))
-
-                    for axis, fcurve in enumerate(curvesPos):
-                        fcurve.color_mode = 'AUTO_RGB'
-                        fcurve.keyframe_points.add(1)
-                        fcurve.keyframe_points[-1].co = [context.scene.frame_current, bone.location[axis]]
-                        fcurve.keyframe_points[-1].interpolation = 'LINEAR'
-                        fcurve.update()
+                    skel.keyframe_insert(data_path='pose.bones["%s"].%s' %
+                                       (bone.name, "location"),
+                                       frame=context.scene.frame_current,
+                                       group=actionName)
 
                     # Next, create rotation keyframes
-                    for ri in range(4):
-                            curvesRot.append(action.fcurves.new(data_path='pose.bones["%s"].%s' %
-                                   (bone.name, "rotation_quaternion"),
-                                   index=ri,
-                                   action_group=bone.name))
-
-                    for axis, fcurve in enumerate(curvesRot):
-                        fcurve.color_mode = 'AUTO_YRGB'
-                        fcurve.keyframe_points.add(1)
-                        fcurve.keyframe_points[-1].co = [context.scene.frame_current, bone.rotation_quaternion[axis]]
-                        fcurve.keyframe_points[-1].interpolation = 'LINEAR'
-                        fcurve.update()
+                    skel.keyframe_insert(data_path='pose.bones["%s"].%s' %
+                                       (bone.name, "rotation_quaternion"),
+                                       frame=context.scene.frame_current,
+                                       group=actionName)
 
                     # Last, create scale keyframes
-                    for si in range(3):
-                            curvesSca.append(action.fcurves.new(data_path='pose.bones["%s"].%s' %
-                                   (bone.name, "scale"),
-                                   index=si,
-                                   action_group=bone.name))
-
-                    for axis, fcurve in enumerate(curvesSca):
-                        fcurve.color_mode = 'AUTO_RGB'
-                        fcurve.keyframe_points.add(1)
-                        fcurve.keyframe_points[-1].co = [context.scene.frame_current, bone.scale[axis]]
-                        fcurve.keyframe_points[-1].interpolation = 'LINEAR'
-                        fcurve.update()
+                    skel.keyframe_insert(data_path='pose.bones["%s"].%s' %
+                                       (bone.name, "scale"),
+                                       frame=context.scene.frame_current,
+                                       group=actionName)
 
             bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
