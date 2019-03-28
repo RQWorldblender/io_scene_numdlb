@@ -1,4 +1,4 @@
-import bitio, enum, io, math, mathutils, os, struct, sys, time
+import enum, io, math, mathutils, os, struct, sys, time
 
 class AnimTrack:
     def __init__(self):
@@ -66,6 +66,34 @@ def readVarLenString(file):
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
+# Utility function to read from a buffer by bits, as Python can only read by bytes
+def readBits(buffer, bitCount, bitPosition):
+    bee = struct.unpack('<B', buffer.read(1))[0] # Peek at next byte
+    buffer.seek(-1, 1) # Go back one byte
+    value = 0
+    LE = 0
+    bitIndex = 0
+    for i in range(bitCount):
+        bit = (bee & (0x1 << bitPosition)) >> bitPosition
+        value = value | (bit << (LE + bitIndex))
+        bitPosition += 1
+        bitIndex += 1
+        if (bitPosition >= 8):
+            bitPosition = 0
+            buffer.seek(1, 1) # Go forward one byte
+            bee = struct.unpack('<B', buffer.read(1))[0] # Peek at next byte
+            buffer.seek(-1, 1) # Go back one byte
+
+        if (bitIndex >= 8):
+            bitIndex = 0
+            if ((LE + 8) > bitCount):
+                LE = bitCount - 1
+            else:
+                LE += 8
+
+    # Also return the bitPosition so that it can be reused by another call to this function
+    return value, bitPosition
+
 # A standard linear interpolation function for individual values
 def lerp(av, bv, v0, v1, factor):
     if (v0 == v1):
@@ -85,7 +113,7 @@ def getAnimationInfo(animpath):
     NodeCount = 0
     global AnimGroups; AnimGroups = {}
     # Structure of this dict is: {AnimType (numeric): an array of AnimTrack objects}
-    
+
     if os.path.isfile(animpath):
         with open(animpath, 'rb') as am:
             am.seek(0x10, 0)
@@ -102,7 +130,7 @@ def getAnimationInfo(animpath):
                 GroupCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                 BufferOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                 BufferSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                # print("GroupOffset: " + str(GroupOffset) + " | " + "GroupCount: " + str(GroupCount) + " | " + "BufferOffset: " + str(BufferOffset) + " | " + "BufferSize: " + str(BufferSize))
+                print("GroupOffset: " + str(GroupOffset) + " | " + "GroupCount: " + str(GroupCount) + " | " + "BufferOffset: " + str(BufferOffset) + " | " + "BufferSize: " + str(BufferSize))
                 am.seek(AnimNameOffset, 0)
                 AnimName = readVarLenString(am); am.seek(0x04, 1)
                 print("AnimName: " + AnimName)
@@ -145,7 +173,7 @@ def getAnimationInfo(animpath):
 def readAnimations(ao):
     for ag in AnimGroups.items():
         for track in ag[1]:
-            ao.seek(track.dataOffset, 0)    
+            ao.seek(track.dataOffset, 0)
             # Collect the actual data pertaining to every node
             if ((track.flags & 0xff00) == AnimTrackFlags.Constant.value or (track.flags & 0xff00) == AnimTrackFlags.ConstTransform.value):
                 readDirectData(ao, track)
@@ -207,6 +235,7 @@ def readCompressedData(aq, track):
     ach.bitsPerEntry = struct.unpack('<H', aq.read(2))[0]
     ach.compressedDataOffset = struct.unpack('<L', aq.read(4))[0]
     ach.frameCount = struct.unpack('<L', aq.read(4))[0]
+    bp = 0 # Workaround to allow the bitreader function to continue at wherever it left off
 
     if ((track.flags & 0x00ff) == AnimTrackFlags.Transform.value):
         acj = [] # Contains an array of AnimCompressedItem objects
@@ -254,8 +283,7 @@ def readCompressedData(aq, track):
                 if (valueBitCount == 0):
                     continue
 
-                br = bitio.BitReader(aq)
-                value = br.readbits(valueBitCount)
+                value, bp = readBits(aq, valueBitCount, bp)
                 scale = 0
                 for k in range(valueBitCount):
                     scale = scale | (0x1 << k)
@@ -295,8 +323,8 @@ def readCompressedData(aq, track):
 
             # Rotations have an extra bit at the end
             if ((ach.flags & 0x4) > 0):
-                br = bitio.BitReader(aq)
-                wFlip = br.readbits(1) == 1
+                wBit, bp = readBits(aq, 1, bp)
+                wFlip = wBit == 1
 
                 # W is calculated
                 transform[1][3] = math.sqrt(abs(1 - (pow(transform[1][0], 2) + pow(transform[1][1], 2) + pow(transform[1][2], 2))))
@@ -318,8 +346,7 @@ def readCompressedData(aq, track):
     if ((track.flags & 0x00ff) == AnimTrackFlags.Boolean.value):
         aq.seek(track.dataOffset + ach.compressedDataOffset, 0)
         for t in range(ach.frameCount):
-            br = bitio.BitReader(aq)
-            bitValue = br.readbits(ach.bitsPerEntry)
+            bitValue, bp = readBits(aq, ach.bitsPerEntry, bp)
             track.animations.append(bitValue == 1)
 
     if ((track.flags & 0x00ff) == AnimTrackFlags.Vector4.value):
@@ -332,6 +359,7 @@ def readCompressedData(aq, track):
             acj.append(aci)
         #print(acj)
 
+        aq.seek(track.dataOffset + ach.defaultDataOffset, 0)
         values = []
         # Copy default values
         for c in range(4):
@@ -346,8 +374,7 @@ def readCompressedData(aq, track):
                 if (valueBitCount == 0):
                     continue
 
-                br = bitio.BitReader(aq)
-                value = br.readbits(valueBitCount)
+                value, bp = readBits(aq, valueBitCount, bp)
                 scale = 0
                 for k in range(valueBitCount):
                     scale = scale | (0x1 << k)

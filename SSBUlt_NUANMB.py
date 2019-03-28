@@ -26,7 +26,7 @@ bl_info = {
     "tracker_url": "https://gitlab.com/Worldblender/io_scene_numdlb/issues",
     "category": "Import-Export"}
 
-import bitio, bmesh, bpy, bpy_extras, enum, io, math, mathutils, os, struct, string, sys, time
+import bmesh, bpy, bpy_extras, enum, io, math, mathutils, os, struct, string, sys, time
 
 class AnimTrack:
     def __init__(self):
@@ -94,6 +94,34 @@ def readVarLenString(file):
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
+# Utility function to read from a buffer by bits, as Python can only read by bytes
+def readBits(buffer, bitCount, bitPosition):
+    bee = struct.unpack('<B', buffer.read(1))[0] # Peek at next byte
+    buffer.seek(-1, 1) # Go back one byte
+    value = 0
+    LE = 0
+    bitIndex = 0
+    for i in range(bitCount):
+        bit = (bee & (0x1 << bitPosition)) >> bitPosition
+        value = value | (bit << (LE + bitIndex))
+        bitPosition += 1
+        bitIndex += 1
+        if (bitPosition >= 8):
+            bitPosition = 0
+            buffer.seek(1, 1) # Go forward one byte
+            bee = struct.unpack('<B', buffer.read(1))[0] # Peek at next byte
+            buffer.seek(-1, 1) # Go back one byte
+
+        if (bitIndex >= 8):
+            bitIndex = 0
+            if ((LE + 8) > bitCount):
+                LE = bitCount - 1
+            else:
+                LE += 8
+
+    # Also return the bitPosition so that it can be reused by another call to this function
+    return value, bitPosition
+
 # A standard linear interpolation function for individual values
 def lerp(av, bv, v0, v1, factor):
     if (v0 == v1):
@@ -105,6 +133,12 @@ def lerp(av, bv, v0, v1, factor):
 
     mu = (factor - v0) / (v1 - v0)
     return (av * (1 - mu)) + (bv * mu)
+
+def findTrackByBone(trackGroup, bone):
+    for track in trackGroup:
+        if (track.name == bone.name):
+            return track
+    return
 
 def getAnimationInfo(self, context, filepath, import_method, auto_rotate):
     # Semi-global variables used by this function's hierarchy; cleared every time this function runs
@@ -134,7 +168,7 @@ def getAnimationInfo(self, context, filepath, import_method, auto_rotate):
                     GroupCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                     BufferOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                     BufferSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                    # print("GroupOffset: " + str(GroupOffset) + " | " + "GroupCount: " + str(GroupCount) + " | " + "BufferOffset: " + str(BufferOffset) + " | " + "BufferSize: " + str(BufferSize))
+                    print("GroupOffset: " + str(GroupOffset) + " | " + "GroupCount: " + str(GroupCount) + " | " + "BufferOffset: " + str(BufferOffset) + " | " + "BufferSize: " + str(BufferSize))
                     am.seek(AnimNameOffset, 0)
                     AnimName = readVarLenString(am); am.seek(0x04, 1)
                     print("AnimName: " + AnimName)
@@ -251,6 +285,7 @@ def readCompressedData(aq, track):
     ach.bitsPerEntry = struct.unpack('<H', aq.read(2))[0]
     ach.compressedDataOffset = struct.unpack('<L', aq.read(4))[0]
     ach.frameCount = struct.unpack('<L', aq.read(4))[0]
+    bp = 0 # Workaround to allow the bitreader function to continue at wherever it left off
 
     if ((track.flags & 0x00ff) == AnimTrackFlags.Transform.value):
         acj = [] # Contains an array of AnimCompressedItem objects
@@ -298,8 +333,7 @@ def readCompressedData(aq, track):
                 if (valueBitCount == 0):
                     continue
 
-                br = bitio.BitReader(aq)
-                value = br.readbits(valueBitCount)
+                value, bp = readBits(aq, valueBitCount, bp)
                 scale = 0
                 for k in range(valueBitCount):
                     scale = scale | (0x1 << k)
@@ -339,8 +373,8 @@ def readCompressedData(aq, track):
 
             # Rotations have an extra bit at the end
             if ((ach.flags & 0x4) > 0):
-                br = bitio.BitReader(aq)
-                wFlip = br.readbits(1) == 1
+                wBit, bp = readBits(aq, 1, bp)
+                wFlip = wBit == 1
 
                 # W is calculated
                 transform[1][3] = math.sqrt(abs(1 - (pow(transform[1][0], 2) + pow(transform[1][1], 2) + pow(transform[1][2], 2))))
@@ -362,8 +396,7 @@ def readCompressedData(aq, track):
     if ((track.flags & 0x00ff) == AnimTrackFlags.Boolean.value):
         aq.seek(track.dataOffset + ach.compressedDataOffset, 0)
         for t in range(ach.frameCount):
-            br = bitio.BitReader(aq)
-            bitValue = br.readbits(ach.bitsPerEntry)
+            bitValue, bp = readBits(aq, ach.bitsPerEntry, bp)
             track.animations.append(bitValue == 1)
 
     if ((track.flags & 0x00ff) == AnimTrackFlags.Vector4.value):
@@ -376,6 +409,7 @@ def readCompressedData(aq, track):
             acj.append(aci)
         #print(acj)
 
+        aq.seek(track.dataOffset + ach.defaultDataOffset, 0)
         values = []
         # Copy default values
         for c in range(4):
@@ -390,8 +424,7 @@ def readCompressedData(aq, track):
                 if (valueBitCount == 0):
                     continue
 
-                br = bitio.BitReader(aq)
-                value = br.readbits(valueBitCount)
+                value, bp = readBits(aq, valueBitCount, bp)
                 scale = 0
                 for k in range(valueBitCount):
                     scale = scale | (0x1 << k)
@@ -415,7 +448,9 @@ def importAnimations(context, import_method, auto_rotate):
         bone.matrix_basis.identity()
         bone.rotation_mode = 'QUATERNION'
 
-    if (obj.animation_data.action == None):
+    try:
+        obj.animation_data.action
+    except:
         obj.animation_data_create()
 
     # If import method is set to create new actions for every animation (default)
@@ -446,12 +481,15 @@ def importAnimations(context, import_method, auto_rotate):
         em.frame = context.scene.frame_end
 
     for ag in AnimGroups.items():
-        for track in ag[1]:
-            if (ag[0] == AnimType.Transform.value):
-                for tframe, trackData in enumerate(track.animations):
-#                    curvesPos = []
-#                    curvesRot = []
-#                    curvesSca = []
+        if (ag[0] == AnimType.Transform.value):
+            # Iterate through the bone order in selected armature, so that the parent bone(s) get processed first
+            for tbone in obj.pose.bones:
+                boneTrack = findTrackByBone(ag[1], tbone)
+                curvesPos = []
+                curvesRot = []
+                curvesSca = []
+
+                for tframe, trackData in enumerate(boneTrack.animations):
                     """
                     List of fcurve types:
                     * 'location'
@@ -460,93 +498,110 @@ def importAnimations(context, import_method, auto_rotate):
                     * 'scale'
                     """
 
-                    # First, import the position tracks
-#                    for pi in range(3):
-#                        curvesPos.append(action.fcurves.new(data_path='pose.bones["%s"].%s' %
-#                               (track.name, "location"),
-#                               index=pi,
-#                               action_group=track.name))
+                    # Set up a matrix that can set position, rotation, and scale all at once
+                    qr = mathutils.Quaternion(trackData[1].wxyz)
+                    pm = mathutils.Matrix.Translation(trackData[0][:3]) # Position matrix
+                    rm = mathutils.Matrix.Rotation(qr.angle, 4, qr.axis) # Rotation matrix
+                    sm = mathutils.Matrix.Scale(1, 4, trackData[2][:3]) # Scale matrix
+                    transform = mathutils.Matrix(pm * rm * sm)
+                    print(boneTrack.name + " on frame # " + str(tframe + 1))
+                    print("Original matrix: " + str(trackData))
+                    print("Animation matrix: " + str(transform))
+                    print("Decomposed: " + str(transform.decompose()))
+                    try:
+                        if tbone.parent:
+                            print("Parent local matrix: " + str(tbone.parent.bone.matrix_local))
+                            print("Parent final matrix: " + str(transform * tbone.parent.bone.matrix_local))
+                            #tbone.matrix = transform * tbone.parent.bone.matrix_local
+                        else:
+                            print("Local matrix: " + str(tbone.bone.matrix_local))
+                            print("Final matrix: " + str(transform * tbone.bone.matrix_local * Matrix.Rotation(math.pi/2, 4, 'X')))
+                            #tbone.matrix = transform * tbone.bone.matrix_local * Matrix.Rotation(math.pi/2, 4, 'X')
+                    except:
+                        continue
+
+                    # First, add the position keyframes
+                    #if (len(curvesLoc) == 0):
+    #                    for pi in range(3):
+    #                        curvesPos.append(action.fcurves.new(data_path='pose.bones["%s"].%s' %
+    #                               (track.name, "location"),
+    #                               index=pi,
+    #                               action_group=AnimName))
 
                     # for axis, fcurve in enumerate(curvesPos):
-                    try:
-                        # Set the bone position before adding the keyframe
-                        obj.pose.bones[track.name].location = trackData[0][:3]
-                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
-                                   (track.name, "location"),
-                                   frame=tframe + 1,
-                                   group=track.name)
-                    except:
-                        print("Bone " + track.name + " not found in selected armature while setting position on frame " + str(tframe))
-                        continue
-#                        fcurve.color_mode = 'AUTO_RGB'
-#                        fcurve.keyframe_points.add(1)
-#                        fcurve.keyframe_points[-1].co = [frame + 1, trackData[0][axis]]
-#                        fcurve.keyframe_points[-1].interpolation = 'LINEAR'
-#                        fcurve.update()
+#                        try:
+#                            obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
+#                                       (tbone.name, "location"),
+#                                       frame=tframe + 1,
+#                                       group=AnimName)
+#                        except:
+#                            print("Bone " + track.name + " not found in selected armature while setting position on frame " + str(tframe))
+    #                        fcurve.color_mode = 'AUTO_RGB'
+    #                        fcurve.keyframe_points.add(1)
+    #                        fcurve.keyframe_points[-1].co = [frame + 1, boneTrack[0][axis]]
+    #                        fcurve.keyframe_points[-1].interpolation = 'LINEAR'
+    #                        fcurve.update()
 
-                    # Next, import the rotation tracks
-#                    for ri in range(4):
-#                        curvesRot.append(action.fcurves.new(data_path='pose.bones["%s"].%s' %
-#                               (track.name, "rotation_quaternion"),
-#                               index=ri,
-#                               action_group=track.name))
+                    # Next, add the rotation keyframes
+                    #if (len(curvesRot) == 0):
+    #                    for ri in range(4):
+    #                        curvesRot.append(action.fcurves.new(data_path='pose.bones["%s"].%s' %
+    #                               (track.name, "rotation_quaternion"),
+    #                               index=ri,
+    #                               action_group=AnimName))
 
-#                    for axis, fcurve in enumerate(curvesRot):
-                    try:
-                        # Set the bone rotation before adding the keyframe, putting W in front of the rotation array
-                        obj.pose.bones[track.name].rotation_quaternion = trackData[1].wxyz
-                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
-                                   (track.name, "rotation_quaternion"),
-                                   frame=tframe + 1,
-                                   group=track.name)
-                    except:
-                        print("Bone " + track.name + " not found in selected armature while setting rotation on frame " + str(tframe))
-                        continue
-#                        fcurve.color_mode = 'AUTO_YRGB'
-#                        fcurve.keyframe_points.add(1)
-#                        fcurve.keyframe_points[-1].co = [frame + 1, trackData[1][axis]]
-#                        fcurve.keyframe_points[-1].interpolation = 'LINEAR'
-#                        fcurve.update()
+    #                    for axis, fcurve in enumerate(curvesRot):
+#                    try:
+#                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
+#                                   (tbone.name, "rotation_quaternion"),
+#                                   frame=tframe + 1,
+#                                   group=AnimName)
+#                    except:
+#                        print("Bone " + track.name + " not found in selected armature while setting rotation on frame " + str(tframe))
+    #                        fcurve.color_mode = 'AUTO_YRGB'
+    #                        fcurve.keyframe_points.add(1)
+    #                        fcurve.keyframe_points[-1].co = [frame + 1, boneTrack[1][axis]]
+    #                        fcurve.keyframe_points[-1].interpolation = 'LINEAR'
+    #                        fcurve.update()
 
-                    # Last, import the scale tracks
-#                    for si in range(3):
-#                        curvesSca.append(action.fcurves.new(data_path='pose.bones["%s"].%s' %
-#                               (track.name, "scale"),
-#                               index=si,
-#                               action_group=track.name))
+                    # Last, add the scale keyframes
+                    #if (len(curvesSca) == 0):
+    #                    for si in range(3):
+    #                        curvesSca.append(action.fcurves.new(data_path='pose.bones["%s"].%s' %
+    #                               (track.name, "scale"),
+    #                               index=si,
+    #                               action_group=track.name))
 
-#                    for axis, fcurve in enumerate(curvesSca):
-                    try:
-                        # Set the bone scale before adding the keyframe
-                        obj.pose.bones[track.name].scale = trackData[2][:3]
-                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
-                                   (track.name, "scale"),
-                                   frame=tframe + 1,
-                                   group=track.name)
-                    except:
-                        print("Bone " + track.name + " not found in selected armature while setting scale on frame " + str(tframe))
-                        continue
-#                        fcurve.color_mode = 'AUTO_RGB'
-#                        fcurve.keyframe_points.add(1)
-#                        fcurve.keyframe_points[-1].co = [frame + 1, trackData[2][axis]]
-#                        fcurve.keyframe_points[-1].interpolation = 'LINEAR'
-#                        fcurve.update()
+    #                    for axis, fcurve in enumerate(curvesSca):
+#                    try:
+#                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
+#                                   (tbone.name, "scale"),
+#                                   frame=tframe + 1,
+#                                   group=AnimName)
+#                    except:
+#                        print("Bone " + track.name + " not found in selected armature while setting scale on frame " + str(tframe))
+    #                        fcurve.color_mode = 'AUTO_RGB'
+    #                        fcurve.keyframe_points.add(1)
+    #                        fcurve.keyframe_points[-1].co = [frame + 1, boneTrack[2][axis]]
+    #                        fcurve.keyframe_points[-1].interpolation = 'LINEAR'
+    #                        fcurve.update()
 
-            elif (ag[0] == AnimType.Visibility.value):
+        elif (ag[0] == AnimType.Visibility.value):
+            for track in ag[1]:
                 for vframe, trackData in enumerate(track.animations):
                     # All meshes are visible by default, so search the object list and hide objects whose visibility is False
                     for mesh in bpy.data.objects:
                         if (mesh.type == 'MESH' and (track.name in mesh.name)):
                             mesh.hide = not trackData
                             mesh.hide_render = not trackData
-                            mesh.keyframe_insert(data_path="hide", frame=vframe + 1)
-                            mesh.keyframe_insert(data_path="hide_render", frame=vframe + 1)
+                            mesh.keyframe_insert(data_path="hide", frame=vframe + 1, group=AnimName)
+                            mesh.keyframe_insert(data_path="hide_render", frame=vframe + 1, group=AnimName)
 
-            elif (ag[0] == AnimType.Material.value):
-                print("Importing material animations not yet supported")
+        elif (ag[0] == AnimType.Material.value):
+            print("Importing material animations not yet supported")
 
-            elif (ag[0] == AnimType.Camera.value):
-                print("Importing camera animations not yet supported")
+        elif (ag[0] == AnimType.Camera.value):
+            print("Importing camera animations not yet supported")
 
     # Clear any unkeyed poses
     for bone in obj.pose.bones:

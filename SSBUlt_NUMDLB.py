@@ -397,7 +397,8 @@ def importSkeleton(context, SKTName, connect_bones=False, create_rest_action=Tru
                 print(tfm.decompose())
 
                 newBone = skel.data.edit_bones.new(BoneName_array[c])
-                newBone.transform(tfm, scale=True, roll=False)
+                newBone.matrix = tfm
+
                 if connect_bones:
                     newBone.use_connect = True
                 else:
@@ -427,7 +428,9 @@ def importSkeleton(context, SKTName, connect_bones=False, create_rest_action=Tru
                 action = bpy.data.actions.new(actionName)
                 action.pose_markers.new(actionName)
 
-                if (skel.animation_data.action == None):
+                try:
+                    skel.animation_data.action
+                except:
                     skel.animation_data_create()
 
                 skel.animation_data.action = action
@@ -933,7 +936,11 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                 if (use_uv_maps and UVCount > 0):
                     for id, uv_layer in enumerate(mesh.uv_textures):
                         for poly in uv_layer.data:
-                            poly.image = bpy.data.images[findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], id) + texture_ext]
+                            try:
+                                poly.image = bpy.data.images[findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], id) + texture_ext]
+                            except:
+                                # Image does not exist
+                                print("Could not find image for UV map " + uv_layer.name)
 
                 # Apply matrix transformation to single-binding meshes
                 if (PolyGrp_array[p].singleBindName != ""):
