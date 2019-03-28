@@ -290,6 +290,7 @@ def importMaterials(MATName, image_transparency, texture_ext):
                 else:
                     mat = bpy.data.materials.new(Materials_array[m].materialName)
                 mat.specular_shader = 'PHONG'
+                mat.user_fake_user = True
                 # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
                 if (Materials_array[m].color1Name != ""):
                     if (bpy.data.textures.find(Materials_array[m].color1Name) > 0):
@@ -940,7 +941,7 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                                 poly.image = bpy.data.images[findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], id) + texture_ext]
                             except:
                                 # Image does not exist
-                                print("Could not find image for UV map " + uv_layer.name)
+                                continue
 
                 # Apply matrix transformation to single-binding meshes
                 if (PolyGrp_array[p].singleBindName != ""):

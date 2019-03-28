@@ -232,11 +232,11 @@ def readAnimations(ao):
                     readDirect(ao, track)
             if ((track.flags & 0xff00) == AnimTrackFlags.Compressed.value):
                 readCompressedData(ao, track)
-            print(track.name + " | " + AnimType(ag[0]).name)
+            #print(track.name + " | " + AnimType(ag[0]).name)
             # print(track.animations)
-            for id, frame in enumerate(track.animations):
-                print(id + 1)
-                print(frame)
+            #for id, frame in enumerate(track.animations):
+            #    print(id + 1)
+            #    print(frame)
 
     ao.close()
 
@@ -509,14 +509,14 @@ def importAnimations(context, import_method, auto_rotate):
                     print("Animation matrix: " + str(transform))
                     print("Decomposed: " + str(transform.decompose()))
                     try:
-                        if tbone.parent:
-                            print("Parent local matrix: " + str(tbone.parent.bone.matrix_local))
-                            print("Parent final matrix: " + str(transform * tbone.parent.bone.matrix_local))
+                        #if tbone.parent:
+                        #    print("Parent local matrix: " + str(tbone.parent.bone.matrix_local))
+                        #    print("Parent final matrix: " + str(transform * tbone.parent.bone.matrix_local))
                             #tbone.matrix = transform * tbone.parent.bone.matrix_local
-                        else:
-                            print("Local matrix: " + str(tbone.bone.matrix_local))
-                            print("Final matrix: " + str(transform * tbone.bone.matrix_local * Matrix.Rotation(math.pi/2, 4, 'X')))
-                            #tbone.matrix = transform * tbone.bone.matrix_local * Matrix.Rotation(math.pi/2, 4, 'X')
+                        #else:
+                        print("Local matrix: " + str(tbone.bone.matrix_local))
+                        print("Final matrix: " + str(transform * tbone.bone.matrix_local))
+                        tbone.matrix = transform * tbone.bone.matrix_local
                     except:
                         continue
 
@@ -529,12 +529,13 @@ def importAnimations(context, import_method, auto_rotate):
     #                               action_group=AnimName))
 
                     # for axis, fcurve in enumerate(curvesPos):
-#                        try:
-#                            obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
-#                                       (tbone.name, "location"),
-#                                       frame=tframe + 1,
-#                                       group=AnimName)
-#                        except:
+                        try:
+                            obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
+                                       (tbone.name, "location"),
+                                       frame=tframe + 1,
+                                       group=AnimName)
+                        except:
+                            continue
 #                            print("Bone " + track.name + " not found in selected armature while setting position on frame " + str(tframe))
     #                        fcurve.color_mode = 'AUTO_RGB'
     #                        fcurve.keyframe_points.add(1)
@@ -551,12 +552,13 @@ def importAnimations(context, import_method, auto_rotate):
     #                               action_group=AnimName))
 
     #                    for axis, fcurve in enumerate(curvesRot):
-#                    try:
-#                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
-#                                   (tbone.name, "rotation_quaternion"),
-#                                   frame=tframe + 1,
-#                                   group=AnimName)
-#                    except:
+                    try:
+                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
+                                   (tbone.name, "rotation_quaternion"),
+                                   frame=tframe + 1,
+                                   group=AnimName)
+                    except:
+                        continue
 #                        print("Bone " + track.name + " not found in selected armature while setting rotation on frame " + str(tframe))
     #                        fcurve.color_mode = 'AUTO_YRGB'
     #                        fcurve.keyframe_points.add(1)
@@ -573,12 +575,13 @@ def importAnimations(context, import_method, auto_rotate):
     #                               action_group=track.name))
 
     #                    for axis, fcurve in enumerate(curvesSca):
-#                    try:
-#                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
-#                                   (tbone.name, "scale"),
-#                                   frame=tframe + 1,
-#                                   group=AnimName)
-#                    except:
+                    try:
+                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
+                                   (tbone.name, "scale"),
+                                   frame=tframe + 1,
+                                   group=AnimName)
+                    except:
+                        continue
 #                        print("Bone " + track.name + " not found in selected armature while setting scale on frame " + str(tframe))
     #                        fcurve.color_mode = 'AUTO_RGB'
     #                        fcurve.keyframe_points.add(1)
