@@ -19,6 +19,8 @@ Imports data referenced by NUMDLB files and NUANMB files (binary model and anima
 
 * Direct folder (Google Drive): <https://drive.google.com/open?id=1QucKyF_4IMFvZNZe4mMEiUXiAH5tpTIc>
 
+* PNG textures: <https://gitlab.com/Worldblender/smash-ultimate-textures>
+
 ## Installation
 This set of two scripts requires Blender 2.70 or later, but only 2.79 has been tested.
 
