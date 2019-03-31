@@ -134,13 +134,7 @@ def lerp(av, bv, v0, v1, factor):
     mu = (factor - v0) / (v1 - v0)
     return (av * (1 - mu)) + (bv * mu)
 
-def findTrackByBone(trackGroup, bone):
-    for track in trackGroup:
-        if (track.name == bone.name):
-            return track
-    return
-
-def getAnimationInfo(self, context, filepath, import_method, auto_rotate):
+def getAnimationInfo(self, context, filepath, import_method, read_transform, read_material, read_visibility, read_camera):
     # Semi-global variables used by this function's hierarchy; cleared every time this function runs
     global AnimName; AnimName = ""
     GroupCount = 0
@@ -208,17 +202,10 @@ def getAnimationInfo(self, context, filepath, import_method, auto_rotate):
                     readAnimations(io.BytesIO(am.read(BufferSize)))
 
                     # Now get the data into Blender
-                    importAnimations(context, import_method, auto_rotate)
+                    importAnimations(context, import_method, read_transform, read_material, read_visibility, read_camera)
 
                 else:
                     raise RuntimeError("%s is not a valid NUANMB file." % animPath)
-
-                # Rotate armature if option is enabled
-        #        if auto_rotate:
-        #            bpy.ops.object.select_all(action='TOGGLE')
-        #            bpy.ops.object.select_pattern(pattern="*Armature*")
-        #            bpy.ops.transform.rotate(value=math.radians(90), axis=(1, 0, 0), constraint_axis=(True, False, False), constraint_orientation='GLOBAL', mirror=False, proportional='DISABLED', proportional_edit_falloff='SMOOTH', proportional_size=1)
-        #            bpy.ops.object.select_all(action='TOGGLE')
 
 def readAnimations(ao):
     for ag in AnimGroups.items():
@@ -438,7 +425,7 @@ def readCompressedData(aq, track):
             track.animations.append(values)
 
 # This function deals with all of the Blender-specific operations
-def importAnimations(context, import_method, auto_rotate):
+def importAnimations(context, import_method, read_transform, read_material, read_visibility, read_camera):
     obj = bpy.context.object
     bpy.ops.object.mode_set(mode='POSE', toggle=False)
 
@@ -481,79 +468,69 @@ def importAnimations(context, import_method, auto_rotate):
         em.frame = context.scene.frame_end
 
     for ag in AnimGroups.items():
-        if (ag[0] == AnimType.Transform.value):
-            # Iterate through the bone order in selected armature, so that the parent bone(s) get processed first
-            for tbone in obj.pose.bones:
-                boneTrack = findTrackByBone(ag[1], tbone)
-                curvesPos = []
-                curvesRot = []
-                curvesSca = []
-                if (boneTrack):
-                    for tframe, trackData in enumerate(boneTrack.animations):
-                        """
-                        List of fcurve types:
-                        * 'location'
-                        * 'rotation_euler'
-                        * 'rotation_quaternion'
-                        * 'scale'
-                        """
-
+        if (read_transform and ag[0] == AnimType.Transform.value):
+            # Iterate by frame, and loop through tracks by name to set the transformation matrices
+            for frame in range(int(FrameCount) + 1):
+                # Structure of this dict is: {bone name, transformation matrix}; is cleared on every frame
+                tfmArray = {}
+                print("Track frame # " + str(frame))
+                for track in ag[1]:
+                    print(track.frameCount)
+                    print(track.name)
+                    print(frame < track.frameCount)
+                    if (frame < track.frameCount):
                         # Set up a matrix that can set position, rotation, and scale all at once
-                        qr = mathutils.Quaternion(trackData[1].wxyz)
-                        pm = mathutils.Matrix.Translation(trackData[0][:3]) # Position matrix
+                        qr = mathutils.Quaternion(track.animations[frame][1].wxyz)
+                        pm = mathutils.Matrix.Translation(track.animations[frame][0][:3]) # Position matrix
                         rm = mathutils.Matrix.Rotation(qr.angle, 4, qr.axis) # Rotation matrix
-                        sm = mathutils.Matrix.Scale(1, 4, trackData[2][:3]) # Scale matrix
+                        sm = mathutils.Matrix.Scale(1, 4, track.animations[frame][2][:3]) # Scale matrix
                         transform = mathutils.Matrix(pm * rm * sm)
-                        print(boneTrack.name + " on frame # " + str(tframe + 1))
-                        print("Original matrix: " + str(trackData))
-                        print("Animation matrix: " + str(transform))
-                        print("Decomposed: " + str(transform.decompose()))
-                        try:
-                            #if tbone.parent:
-                            #    print("Parent local matrix: " + str(tbone.parent.bone.matrix_local))
-                            #    print("Parent final matrix: " + str(transform * tbone.parent.bone.matrix_local))
-                                #tbone.matrix = transform * tbone.parent.bone.matrix_local
-                            #else:
-                            print("Local matrix: " + str(tbone.bone.matrix_local))
-                            print("Final matrix: " + str(transform * tbone.bone.matrix_local))
-                            tbone.matrix = transform * tbone.bone.matrix_local
-                            #tbone.location = trackData[0][:3]
-                            #tbone.rotation_quaternion = trackData[1].wxyz
-                            #tbone.scale = trackData[2][:3]
-                        except:
-                            continue
+                        tfmArray[track.name] = transform
 
-                        # First, add the position keyframes
-                        try:
-                            obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
-                                       (tbone.name, "location"),
-                                       frame=tframe + 1,
-                                       group=AnimName)
-                        except:
-                            continue
+                # Iterate through the bone order in selected armature, and transform each of them
+                for tbone in obj.pose.bones:
+                    if (tbone.name in tfmArray):
+                        print(tbone.name + " | Animation matrix: " + str(tfmArray[tbone.name].transposed()))
+                        if (tbone.parent):
+                            tbone.matrix = tbone.parent.matrix * tfmArray[tbone.name]
+                        else:
+                            tbone.matrix = tfmArray[tbone.name]
+                    """
+                    List of fcurve types:
+                    * 'location'
+                    * 'rotation_euler'
+                    * 'rotation_quaternion'
+                    * 'scale'
+                    """
 
-                        # Next, add the rotation keyframes
-                        try:
-                            obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
-                                       (tbone.name, "rotation_quaternion"),
-                                       frame=tframe + 1,
-                                       group=AnimName)
-                        except:
-                            continue
+                    # First, add the position keyframes
+                    try:
+                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
+                                   (tbone.name, "location"),
+                                   frame=frame + 1,
+                                   group=AnimName)
+                    except:
+                        continue
 
-                        # Last, add the scale keyframes
-                        try:
-                            obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
-                                       (tbone.name, "scale"),
-                                       frame=tframe + 1,
-                                       group=AnimName)
-                        except:
-                            continue
+                    # Next, add the rotation keyframes
+                    try:
+                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
+                                   (tbone.name, "rotation_quaternion"),
+                                   frame=frame + 1,
+                                   group=AnimName)
+                    except:
+                        continue
 
-                else:
-                    print("Bone " + tbone.name + " was not found in the given animation " + AnimName + ", skip processing this bone")
+                    # Last, add the scale keyframes
+                    try:
+                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
+                                   (tbone.name, "scale"),
+                                   frame=frame + 1,
+                                   group=AnimName)
+                    except:
+                        continue
 
-        elif (ag[0] == AnimType.Visibility.value):
+        elif (read_visibility and ag[0] == AnimType.Visibility.value):
             for track in ag[1]:
                 for vframe, trackData in enumerate(track.animations):
                     # All meshes are visible by default, so search the object list and hide objects whose visibility is False
@@ -573,10 +550,10 @@ def importAnimations(context, import_method, auto_rotate):
                             mesh.keyframe_insert(data_path="hide", frame=vframe + 1, group=AnimName)
                             mesh.keyframe_insert(data_path="hide_render", frame=vframe + 1, group=AnimName)
 
-        elif (ag[0] == AnimType.Material.value):
+        elif (read_material and ag[0] == AnimType.Material.value):
             print("Importing material animations not yet supported")
 
-        elif (ag[0] == AnimType.Camera.value):
+        elif (read_camera and ag[0] == AnimType.Camera.value):
             print("Importing camera animations not yet supported")
 
     # Clear any unkeyed poses
@@ -602,10 +579,28 @@ class NUANMB_Import_Operator(bpy.types.Operator, ImportHelper):
             default="create_new",
             )
 
-    auto_rotate = bpy.props.BoolProperty(
-            name="Auto-Rotate Armature",
-            description="Rotate the armature so that everything points up z-axis, instead of up y-axis",
-            default=False,
+    read_transform = bpy.props.BoolProperty(
+            name="Transformation Tracks",
+            description="Read transformation data",
+            default=True,
+            )
+
+    read_material = bpy.props.BoolProperty(
+            name="Material Tracks",
+            description="Read material data",
+            default=True,
+            )
+
+    read_visibility = bpy.props.BoolProperty(
+            name="Visibility Tracks",
+            description="Read visibility data",
+            default=True,
+            )
+
+    read_camera = bpy.props.BoolProperty(
+            name="Camera Tracks",
+            description="Read camera data",
+            default=True,
             )
 
     def execute(self, context):

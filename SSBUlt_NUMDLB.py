@@ -392,7 +392,12 @@ def importSkeleton(context, SKTName, connect_bones=False, create_rest_action=Tru
                 m21 = struct.unpack('<f', b.read(4))[0]; m22 = struct.unpack('<f', b.read(4))[0]; m23 = struct.unpack('<f', b.read(4))[0]; m24 = struct.unpack('<f', b.read(4))[0]
                 m31 = struct.unpack('<f', b.read(4))[0]; m32 = struct.unpack('<f', b.read(4))[0]; m33 = struct.unpack('<f', b.read(4))[0]; m34 = struct.unpack('<f', b.read(4))[0]
                 m41 = struct.unpack('<f', b.read(4))[0]; m42 = struct.unpack('<f', b.read(4))[0]; m43 = struct.unpack('<f', b.read(4))[0]; m44 = struct.unpack('<f', b.read(4))[0]
-                tfm = mathutils.Matrix([[m11, m21, m31, m41], [m12, m22, m32, m42], [m13, m23, m33, m43], [m14, m24, m34, m44]])
+
+                mr0 = [m11, m21, m31, m41]
+                mr1 = [m12, m22, m32, m42]
+                mr2 = [m13, m23, m33, m43]
+                mr3 = [m14, m24, m34, m44]
+                tfm = mathutils.Matrix([mr0, mr1, mr2, mr3])
                 BoneTrsArray[BoneName_array[c]] = tfm
                 print("Matrix for " + BoneName_array[c] + ":\n" + str(tfm))
                 print(tfm.decompose())
@@ -408,6 +413,13 @@ def importSkeleton(context, SKTName, connect_bones=False, create_rest_action=Tru
                 newBone.use_deform = True
                 newBone.use_inherit_rotation = True
                 newBone.use_inherit_scale = True
+
+                # Store the original matrix rows as custom properties in bones so that they can be reused during animation transformation
+                # These properties should not be changed or removed, or scripts that read from them will fail
+                newBone['matrow0'] = mr0
+                newBone['matrow1'] = mr1
+                newBone['matrow2'] = mr2
+                newBone['matrow3'] = mr3
 
             # Apply parents now that all bones exist
             for bc in range(BoneCount):
@@ -591,7 +603,6 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                 mesh =  bpy.data.meshes.new(PolyGrp_array[p].visGroupName)
                 obj = bpy.data.objects.new(PolyGrp_array[p].visGroupName, mesh)
                 obj.rotation_mode = 'QUATERNION'
-                obj.parent = bpy.data.objects[armaName]
 
                 try:
                     if (len(MODLGrp_array[PolyGrp_array[p].visGroupName]) > 63):
@@ -603,10 +614,15 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                     continue
                 mesh.use_auto_smooth = True
 
-                for bone in bpy.data.armatures[armaName].bones.values():
-                    obj.vertex_groups.new(bone.name)
-                modifier = obj.modifiers.new(armaName, type="ARMATURE")
-                modifier.object = bpy.data.objects[armaName]
+                try:
+                    obj.parent = bpy.data.objects[armaName]
+                    for bone in bpy.data.armatures[armaName].bones.values():
+                        obj.vertex_groups.new(bone.name)
+                    modifier = obj.modifiers.new(armaName, type="ARMATURE")
+                    modifier.object = bpy.data.objects[armaName]
+                except:
+                    # If model does not have a skeleton
+                    print(MODLName + " does not have an armature, skip parenting " + PolyGrp_array[p].visGroupName)
 
                 # Begin reading mesh data
                 f.seek(PolyGrp_array[p].bufferParamStart, 0)
@@ -922,12 +938,15 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                 # Apply matrix transformation to single-binding meshes
                 if (PolyGrp_array[p].singleBindName != ""):
                     obj.matrix_world = BoneTrsArray[PolyGrp_array[p].singleBindName]
+                    context.scene.cursor_location = BoneTrsArray[PolyGrp_array[p].singleBindName].to_translation()
+                    bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
+                    context.scene.cursor_location = [0.0, 0.0, 0.0]
 
                 bpy.ops.object.select_all(action="DESELECT")
                 obj.select = True
                 context.scene.objects.active = obj
                 bpy.ops.object.shade_smooth()
-                bpy.ops.object.origin_set(type='ORIGIN_GEOMETRY', center='MEDIAN')
+                obj.data.update()
 
 # ==== Import OPERATOR ====
 from bpy_extras.io_utils import (ImportHelper)
