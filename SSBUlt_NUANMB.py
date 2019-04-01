@@ -9,7 +9,7 @@ Tooltip: 'Import *.NUANMB (.nuanmb)'
 
 __author__ = ["Richard Qian (Worldblender)", "Ploaj"]
 __url__ = ["https://gitlab.com/Worldblender/io_scene_numdlb"]
-__version__ = "0.1"
+__version__ = "0.99.0"
 __bpydoc__ = """\
 """
 
@@ -26,7 +26,7 @@ bl_info = {
     "tracker_url": "https://gitlab.com/Worldblender/io_scene_numdlb/issues",
     "category": "Import-Export"}
 
-import bmesh, bpy, bpy_extras, enum, io, math, mathutils, os, struct, string, sys, time
+import bpy, enum, io, math, mathutils, os, struct, time
 
 class AnimTrack:
     def __init__(self):
@@ -174,26 +174,48 @@ def getAnimationInfo(self, context, filepath, import_method, read_transform, rea
                         NodeCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                         AnimGroups[NodeAnimType] = [] # Create empty array to append to later on
                         NextGroupPos = am.tell()
-                        # print("AnimType: " + AnimType[NodeAnimType] + " | " + "NodeOffset: " + str(NodeOffset) + " | " + "NodeCount: " + str(NodeCount) + " | NextGroupPos: " + str(NextGroupPos))
+                        # print("AnimType: " + AnimType(NodeAnimType).name + " | " + "NodeOffset: " + str(NodeOffset) + " | " + "NodeCount: " + str(NodeCount) + " | NextGroupPos: " + str(NextGroupPos))
                         am.seek(NodeOffset, 0)
                         for n in range(NodeCount):
                             NodeNameOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                             NodeDataOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                            NextNodePos = am.tell() + struct.unpack('<L', am.read(4))[0] + 0x07
-                            # print("NodeNameOffset: " + str(NodeNameOffset) + " | " + "NodeDataOffset: " + str(NodeDataOffset) + " | " + "NextNodePos: " + str(NextNodePos))
-                            am.seek(NodeNameOffset, 0)
                             at = AnimTrack()
-                            at.type = NodeAnimType
-                            at.name = readVarLenString(am)
-                            am.seek(NodeDataOffset + 0x08, 0)
-                            at.flags = struct.unpack('<L', am.read(4))[0]
-                            at.frameCount = struct.unpack('<L', am.read(4))[0]
-                            Unk3_0 = struct.unpack('<L', am.read(4))[0]
-                            at.dataOffset = struct.unpack('<L', am.read(4))[0]
-                            at.dataSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                            at.type = readVarLenString(am)
+                            # Special workaround for material tracks
+                            if (NodeAnimType == AnimType.Material.value):
+                                TrackCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                                NextNodePos = am.tell()
+                                am.seek(NodeNameOffset, 0)
+                                at.name = readVarLenString(am)
+                                am.seek(NodeDataOffset, 0)
+                                for tr in range(TrackCount):
+                                    # An offset for the type name, which will be seeked to later
+                                    TypeOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                                    at.flags = struct.unpack('<L', am.read(4))[0]
+                                    at.frameCount = struct.unpack('<L', am.read(4))[0]
+                                    Unk3_0 = struct.unpack('<L', am.read(4))[0]
+                                    at.dataOffset = struct.unpack('<L', am.read(4))[0]
+                                    at.dataSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                                    NextTrackPos = am.tell()
+                                    am.seek(TypeOffset, 0)
+                                    at.type = readVarLenString(am)
+                                    am.seek(NextTrackPos, 0)
+                                    AnimGroups[NodeAnimType].append(at)
+                            else:
+                                NextNodePos = am.tell() + struct.unpack('<L', am.read(4))[0] + 0x07
+
+                                am.seek(NodeNameOffset, 0)
+                                at.name = readVarLenString(am)
+                                am.seek(NodeDataOffset + 0x08, 0)
+                                at.flags = struct.unpack('<L', am.read(4))[0]
+                                at.frameCount = struct.unpack('<L', am.read(4))[0]
+                                Unk3_0 = struct.unpack('<L', am.read(4))[0]
+                                at.dataOffset = struct.unpack('<L', am.read(4))[0]
+                                at.dataSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                                at.type = readVarLenString(am)
+                                AnimGroups[NodeAnimType].append(at)
+
+                            # print("NodeNameOffset: " + str(NodeNameOffset) + " | " + "NodeDataOffset: " + str(NodeDataOffset) + " | " + "NextNodePos: " + str(NextNodePos))
                             # print("NodeName: " + str(at.name) + " | " + "TrackFlags: " + str(at.flags) + " | " + "TrackFrameCount: " + str(at.frameCount) + " | " + "Unk3: " + str(Unk3_0) + " | " + "TrackDataOffset: " + str(at.dataOffset) +" | " + "TrackDataSize: " + str(at.dataSize))
-                            AnimGroups[NodeAnimType].append(at)
                             am.seek(NextNodePos, 0)
                         # print("---------")
                         am.seek(NextGroupPos, 0)
@@ -220,7 +242,6 @@ def readAnimations(ao):
             if ((track.flags & 0xff00) == AnimTrackFlags.Compressed.value):
                 readCompressedData(ao, track)
             #print(track.name + " | " + AnimType(ag[0]).name)
-            # print(track.animations)
             #for id, frame in enumerate(track.animations):
             #    print(id + 1)
             #    print(frame)
@@ -475,9 +496,6 @@ def importAnimations(context, import_method, read_transform, read_material, read
                 tfmArray = {}
                 print("Track frame # " + str(frame))
                 for track in ag[1]:
-                    print(track.frameCount)
-                    print(track.name)
-                    print(frame < track.frameCount)
                     if (frame < track.frameCount):
                         # Set up a matrix that can set position, rotation, and scale all at once
                         qr = mathutils.Quaternion(track.animations[frame][1].wxyz)

@@ -5,7 +5,7 @@ Imports data referenced by NUMDLB files and NUANMB files (binary model and anima
 
 * Vertex colors are set, but the alpha channel is not used, as there is no way to set it within the Blender UI.
 
-* Animations imported from files may cause meshes to deform incorrectly, although I'm working on a NUANMB importer in hopes of solving this problem.
+* Animations imported from files may cause meshes to deform incorrectly, most likely because bone roll is not yet properly recalculated.
 
 * The following kinds of textures are read, but currently not imported (the Cycles and EEVEE (2.80 and later) rendering engines may support them however):
     * Normal maps
@@ -54,7 +54,7 @@ This set of two scripts requires Blender 2.70 or later, but only 2.79 has been t
 
 3. Select `NUMDLB Import` or `NUANMB Import`, depending on what was selected earlier.
 
-4. If importing data from NUMDLB files, images are now assigned automatically to UV maps for all meshes if available. To display these images on meshes, switch the viewport shading option to 'Textured', or open the 3D View properties panel on the right, and select the 'Textured Solid' option in the 'Shading' subpanel.
+4. If importing data from NUMDLB files, **images are now assigned automatically to UV maps for all meshes if they are located in the same directory as the model files are.** To display these images on meshes, switch the viewport shading option to 'Textured', or open the 3D View properties panel on the right, and select the 'Textured Solid' option in the 'Shading' subpanel.
 
 ## Extras
 In the *extras* directory are some more scripts. The original MAXScript, a mesh cleanup script, and data read-only scripts can be found here. The data read-only scripts require Blender like the importer scripts do, but they do not require the UI to be open. To run these scripts, type this into a terminal window/command prompt: `blender --background  --python <path-to-script>`, where `blender` may need to be replaced by the full executable path depending on how Blender was installed.

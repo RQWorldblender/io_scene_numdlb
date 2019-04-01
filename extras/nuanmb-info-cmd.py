@@ -142,25 +142,47 @@ def getAnimationInfo(animpath):
                     NodeCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                     AnimGroups[NodeAnimType] = [] # Create empty array to append to later on
                     NextGroupPos = am.tell()
-                    # print("AnimType: " + AnimType(NodeAnimType).name + " | " + "NodeOffset: " + str(NodeOffset) + " | " + "NodeCount: " + str(NodeCount) + " | NextGroupPos: " + str(NextGroupPos))
+                    print("AnimType: " + AnimType(NodeAnimType).name + " | " + "NodeOffset: " + str(NodeOffset) + " | " + "NodeCount: " + str(NodeCount) + " | NextGroupPos: " + str(NextGroupPos))
                     am.seek(NodeOffset, 0)
                     for n in range(NodeCount):
                         NodeNameOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                         NodeDataOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                        NextNodePos = am.tell() + struct.unpack('<L', am.read(4))[0] + 0x07
-                        # print("NodeNameOffset: " + str(NodeNameOffset) + " | " + "NodeDataOffset: " + str(NodeDataOffset) + " | " + "NextNodePos: " + str(NextNodePos))
-                        am.seek(NodeNameOffset, 0)
                         at = AnimTrack()
-                        at.name = readVarLenString(am)
-                        am.seek(NodeDataOffset + 0x08, 0)
-                        at.flags = struct.unpack('<L', am.read(4))[0]
-                        at.frameCount = struct.unpack('<L', am.read(4))[0]
-                        Unk3_0 = struct.unpack('<L', am.read(4))[0]
-                        at.dataOffset = struct.unpack('<L', am.read(4))[0]
-                        at.dataSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
-                        at.type = readVarLenString(am)
+                        # Special workaround for material tracks
+                        if (NodeAnimType == AnimType.Material.value):
+                            TrackCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                            NextNodePos = am.tell()
+                            am.seek(NodeNameOffset, 0)
+                            at.name = readVarLenString(am)
+                            am.seek(NodeDataOffset, 0)
+                            for tr in range(TrackCount):
+                                # An offset for the type name, which will be seeked to later
+                                TypeOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                                at.flags = struct.unpack('<L', am.read(4))[0]
+                                at.frameCount = struct.unpack('<L', am.read(4))[0]
+                                Unk3_0 = struct.unpack('<L', am.read(4))[0]
+                                at.dataOffset = struct.unpack('<L', am.read(4))[0]
+                                at.dataSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                                NextTrackPos = am.tell()
+                                am.seek(TypeOffset, 0)
+                                at.type = readVarLenString(am)
+                                am.seek(NextTrackPos, 0)
+                                AnimGroups[NodeAnimType].append(at)
+                        else:
+                            NextNodePos = am.tell() + struct.unpack('<L', am.read(4))[0] + 0x07
+                            am.seek(NodeNameOffset, 0)
+                            at.name = readVarLenString(am)
+                            am.seek(NodeDataOffset + 0x08, 0)
+                            at.flags = struct.unpack('<L', am.read(4))[0]
+                            at.frameCount = struct.unpack('<L', am.read(4))[0]
+                            Unk3_0 = struct.unpack('<L', am.read(4))[0]
+                            at.dataOffset = struct.unpack('<L', am.read(4))[0]
+                            at.dataSize = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
+                            at.type = readVarLenString(am)
+                            AnimGroups[NodeAnimType].append(at)
+
+                        # print("NodeNameOffset: " + str(NodeNameOffset) + " | " + "NodeDataOffset: " + str(NodeDataOffset) + " | " + "NextNodePos: " + str(NextNodePos))
                         # print("NodeName: " + str(at.name) + " | " + "TrackFlags: " + str(at.flags) + " | " + "TrackFrameCount: " + str(at.frameCount) + " | " + "Unk3: " + str(Unk3_0) + " | " + "TrackDataOffset: " + str(at.dataOffset) +" | " + "TrackDataSize: " + str(at.dataSize))
-                        AnimGroups[NodeAnimType].append(at)
                         am.seek(NextNodePos, 0)
                     # print("---------")
                     am.seek(NextGroupPos, 0)
@@ -183,7 +205,6 @@ def readAnimations(ao):
             if ((track.flags & 0xff00) == AnimTrackFlags.Compressed.value):
                 readCompressedData(ao, track)
             print(track.name + " | " + AnimType(ag[0]).name)
-            # print(list(enumerate(track.animations)))
             for id, frame in enumerate(track.animations):
                 print(id + 1)
                 print(frame)
@@ -388,7 +409,8 @@ def readCompressedData(aq, track):
             track.animations.append(values)
 
 #animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a00wait1.nuanmb"
-animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a01turn.nuanmb"
+#animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a01turn.nuanmb"
+animpath = "/media/richard/3AEE25744CE0956E/Smash Ultimate Models/fighter/mario/motion/body/c00/a00wait1.nuanmb"
 
 time_start = time.time()
 getAnimationInfo(animpath)

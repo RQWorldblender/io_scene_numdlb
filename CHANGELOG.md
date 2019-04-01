@@ -8,9 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 * NUANMB importer script is still work-in-progress - the following are known to work correctly:
     * Creating an action and setting its name.
     * Collecting how many frames to set and keying each one.
-    * Visibility animations are the only kind of animation that are imported correctly. All other kinds are unsupported, or fail to import correctly.
+    * Transform and visibility animations are the only kind of animation that are imported at all. All other kinds are unsupported.
 
-The NUANMB importer is not yet deemed to be stable/ready-to-use as bones are not transformed correctly. The only workaround for this is to create custom animations (only for those who know how to animate objects).
+The NUANMB importer is not yet deemed to be stable/ready-to-use as animations cause meshes to deform incorrectly. The only workaround for this is to create custom animations (only for those who know how to animate objects).
 
 ## [1.1.0] - 2019-03-29 (NUMDLB importer only)
 * Images are actually assigned to UV maps automatically if they have been found.
