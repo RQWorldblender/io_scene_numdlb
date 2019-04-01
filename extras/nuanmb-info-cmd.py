@@ -153,9 +153,11 @@ def getAnimationInfo(animpath):
                             TrackCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                             NextNodePos = am.tell()
                             am.seek(NodeNameOffset, 0)
-                            at.name = readVarLenString(am)
+                            NodeName = readVarLenString(am)
                             am.seek(NodeDataOffset, 0)
                             for tr in range(TrackCount):
+                                at = AnimTrack()
+                                at.name = NodeName
                                 # An offset for the type name, which will be seeked to later
                                 TypeOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                                 at.flags = struct.unpack('<L', am.read(4))[0]

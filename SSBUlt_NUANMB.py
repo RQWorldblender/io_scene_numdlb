@@ -17,7 +17,7 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Animation Importer",
     "description": "Imports animation data from NUANMB files (binary animation format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Ploaj",
-    "version": (0,1),
+    "version": (0, 99, 0),
     "blender": (2, 7, 0),
     "api": 31236,
     "location": "File > Import",
@@ -185,9 +185,11 @@ def getAnimationInfo(self, context, filepath, import_method, read_transform, rea
                                 TrackCount = struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                                 NextNodePos = am.tell()
                                 am.seek(NodeNameOffset, 0)
-                                at.name = readVarLenString(am)
+                                NodeName = readVarLenString(am)
                                 am.seek(NodeDataOffset, 0)
                                 for tr in range(TrackCount):
+                                    at = AnimTrack()
+                                    at.name = NodeName
                                     # An offset for the type name, which will be seeked to later
                                     TypeOffset = am.tell() + struct.unpack('<L', am.read(4))[0]; am.seek(0x04, 1)
                                     at.flags = struct.unpack('<L', am.read(4))[0]
