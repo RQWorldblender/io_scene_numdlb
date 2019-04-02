@@ -17,7 +17,7 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Model Importer",
     "description": "Imports data referenced by NUMDLB files (binary model format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Random Talking Bush, Ploaj",
-    "version": (1,1,0),
+    "version": (1, 1, 0),
     "blender": (2, 7, 0),
     "api": 31236,
     "location": "File > Import",
@@ -26,7 +26,7 @@ bl_info = {
     "tracker_url": "https://gitlab.com/Worldblender/io_scene_numdlb/issues",
     "category": "Import-Export"}
 
-import bmesh, bpy, bpy_extras, math, mathutils, os, struct, string, sys, time
+import bmesh, bpy, bpy_extras, math, mathutils, os, struct, sys, time
 
 def reinterpretCastIntToFloat(int_val):
     return struct.unpack('f', struct.pack('I', int_val))[0]
@@ -139,7 +139,7 @@ def readVarLenString(file):
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
-def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles, connect_bones, create_rest_action, auto_rotate):
+def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles, create_rest_action, auto_rotate):
     # Semi-global variables used by this function's hierarchy; cleared every time this function runs
     global dirPath; dirPath = ""
     global MODLName; MODLName = ""
@@ -200,7 +200,7 @@ def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_
         if os.path.isfile(MATName):
             importMaterials(MATName, image_transparency, texture_ext)
         if os.path.isfile(SKTName):
-            importSkeleton(context, SKTName, connect_bones, create_rest_action)
+            importSkeleton(context, SKTName, create_rest_action)
         if os.path.isfile(MSHName):
             importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles)
 
@@ -294,20 +294,18 @@ def importMaterials(MATName, image_transparency, texture_ext):
                 # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
                 if (Materials_array[m].color1Name != ""):
                     if (bpy.data.textures.find(Materials_array[m].color1Name) > 0):
-
                         tex = bpy.data.textures[Materials_array[m].color1Name]
                     else:
                         tex = bpy.data.textures.new(Materials_array[m].color1Name, type='IMAGE')
 
-                    imgPath = os.path.join(os.path.relpath(dirPath), Materials_array[m].color1Name + texture_ext)
-                    if os.path.isfile(imgPath):
-                        img = bpy.data.images.load(imgPath, check_existing=True)
-                        img.use_alpha = image_transparency
-                        tex.image = img
-                        if (mat.texture_slots.find(tex.name) == -1):
-                            slot = mat.texture_slots.add()
-                            slot.texture = tex
-                            slot.texture_coords = 'UV'
+                    img = bpy_extras.image_utils.load_image(Materials_array[m].color1Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
+                    img.use_alpha = image_transparency
+                    tex.image = img
+
+                    if (tex.name not in mat.texture_slots):
+                        slot = mat.texture_slots.add()
+                        slot.texture = tex
+                        slot.texture_coords = 'UV'
                 # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
                 if (Materials_array[m].color2Name != ""):
                     if (bpy.data.textures.find(Materials_array[m].color2Name) > 0):
@@ -315,20 +313,19 @@ def importMaterials(MATName, image_transparency, texture_ext):
                     else:
                         altTex = bpy.data.textures.new(Materials_array[m].color2Name, type='IMAGE')
 
-                    altImgPath = os.path.join(os.path.relpath(dirPath), Materials_array[m].color2Name + texture_ext)
-                    if os.path.isfile(altImgPath):
-                        altImg = bpy.data.images.load(altImgPath, check_existing=True)
-                        altImg.use_alpha = image_transparency
-                        altTex.image = altImg
-                        if (mat.texture_slots.find(altTex.name) == -1):
-                            altSlot = mat.texture_slots.add()
-                            altSlot.texture = altTex
-                            altSlot.texture_coords = 'UV'
+                    altImg = bpy_extras.image_utils.load_image(Materials_array[m].color2Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
+                    altImg.use_alpha = image_transparency
+                    altTex.image = altImg
+
+                    if (altTex.name not in mat.texture_slots):
+                        altSlot = mat.texture_slots.add()
+                        altSlot.texture = altTex
+                        altSlot.texture_coords = 'UV'
 
         print(Materials_array)
 
 # Imports the skeleton
-def importSkeleton(context, SKTName, connect_bones=False, create_rest_action=True):
+def importSkeleton(context, SKTName, create_rest_action):
     BoneCount = 0
     BoneParent_array = []
     BoneName_array = []
@@ -376,6 +373,7 @@ def importSkeleton(context, SKTName, connect_bones=False, create_rest_action=Tru
             skel = bpy.data.objects.new(skelName, bpy.data.armatures.new(skelName))
             global armaName # Used in case another armature of the same name exists
             armaName = skel.data.name
+            skel.rotation_mode = 'QUATERNION'
             skel.data.draw_type = 'STICK'
             skel.show_x_ray = True
 
@@ -405,11 +403,8 @@ def importSkeleton(context, SKTName, connect_bones=False, create_rest_action=Tru
                 newBone = skel.data.edit_bones.new(BoneName_array[c])
                 newBone.matrix = tfm
 
-                if connect_bones:
-                    newBone.use_connect = True
-                else:
-                    # Bones must a be non-zero length, or Blender will eventually remove them
-                    newBone.tail = (newBone.head.x, newBone.head.y + 0.01, newBone.head.z)
+                # Bones must a be non-zero length, or Blender will eventually remove them
+                newBone.tail = (newBone.head.x, newBone.head.y + 0.01, newBone.head.z)
                 newBone.use_deform = True
                 newBone.use_inherit_rotation = True
                 newBone.use_inherit_scale = True
@@ -430,9 +425,6 @@ def importSkeleton(context, SKTName, connect_bones=False, create_rest_action=Tru
                     except:
                         # If parent bone can't be found
                         continue
-                elif connect_bones:
-                    # The parent bone, named "Trans", must a be non-zero length, or Blender will eventually remove it
-                    currBone.tail = (currBone.head.x, currBone.head.y + 0.01, currBone.head.z)
 
             if create_rest_action:
                 # Enter pose mode, and then create an action containing the rest pose if enabled
@@ -550,7 +542,7 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                 f.seek(SingleBindNameOffset, 0)
                 ge.singleBindName = readVarLenString(f)
                 PolyGrp_array.append(ge)
-                print(ge.visGroupName + " unknowns: 1: " + str(Unk1) + "\t| Off1: " + str(UnkOff1) + "\t| 2: " + str(Unk2) + "\t| 3: " + str(Unk3) + "\t| 4: " + str(Unk4) + "\t| 5: " + str(Unk5) + "\t| 6: " + str(Unk6) + "\t| LongFace: " + str(ge.faceLongBit) + "\t| 8: " + str(Unk8) + "\t| Sort: " + str(SortPriority) + "\t| 9: " + str(Unk9) + "\t| 10: " + str(Unk10))
+                # print(ge.visGroupName + " unknowns: 1: " + str(Unk1) + "\t| Off1: " + str(UnkOff1) + "\t| 2: " + str(Unk2) + "\t| 3: " + str(Unk3) + "\t| 4: " + str(Unk4) + "\t| 5: " + str(Unk5) + "\t| 6: " + str(Unk6) + "\t| LongFace: " + str(ge.faceLongBit) + "\t| 8: " + str(Unk8) + "\t| Sort: " + str(SortPriority) + "\t| 9: " + str(Unk9) + "\t| 10: " + str(Unk10))
                 f.seek(PolyGrpRet, 0)
 
             print(PolyGrp_array)
@@ -854,14 +846,19 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                 if (use_vertex_colors and ColorCount > 0):
                     if (len(Color_array) > 0):
                         color_layer = bm.loops.layers.color.new()
+                        alpha_layer = bm.loops.layers.float.new()
                     if (len(Color2_array) > 0):
                         color_layer_2 = bm.loops.layers.color.new()
+                        alpha_layer_2 = bm.loops.layers.float.new()
                     if (len(Color3_array) > 0):
                         color_layer_3 = bm.loops.layers.color.new()
+                        alpha_layer_3 = bm.loops.layers.float.new()
                     if (len(Color4_array) > 0):
                         color_layer_4 = bm.loops.layers.color.new()
+                        alpha_layer_4 = bm.loops.layers.float.new()
                     if (len(Color5_array) > 0):
                         color_layer_5 = bm.loops.layers.color.new()
+                        alpha_layer_5 = bm.loops.layers.float.new()
 
                 if (use_uv_maps and UVCount > 0):
                     if (len(UV_array) > 0):
@@ -894,15 +891,20 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                     for loop in surface.loops:
                         if (use_vertex_colors and ColorCount > 0):
                             if (len(Color_array) > 0):
-                                loop[color_layer] = Color_array[loop.vert.index] # + [Alpha_array[loop.vert.index]] Alpha can't be set here
+                                loop[color_layer] = Color_array[loop.vert.index]
+                                loop[alpha_layer] = Alpha_array[loop.vert.index]
                             if (len(Color2_array) > 0):
                                 loop[color_layer_2] = Color2_array[loop.vert.index]
+                                loop[alpha_layer_2] = Alpha2_array[loop.vert.index]
                             if (len(Color3_array) > 0):
                                 loop[color_layer_3] = Color3_array[loop.vert.index]
+                                loop[alpha_layer_3] = Alpha3_array[loop.vert.index]
                             if (len(Color4_array) > 0):
                                 loop[color_layer_4] = Color4_array[loop.vert.index]
-                            if (len(Color5_array) > 0):
+                                loop[alpha_layer_4] = Alpha4_array[loop.vert.index]
+                            if (len(Color5_array)> 0):
                                 loop[color_layer_5] = Color5_array[loop.vert.index]
+                                loop[alpha_layer_5] = Alpha5_array[loop.vert.index]
                         if (use_uv_maps and UVCount > 0):
                             if (len(UV_array) > 0):
                                 loop[uv_layer].uv = UV_array[loop.vert.index]
@@ -937,6 +939,7 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
 
                 # Apply matrix transformation to single-binding meshes
                 if (PolyGrp_array[p].singleBindName != ""):
+                    obj['singlebind'] = PolyGrp_array[p].singleBindName
                     obj.matrix_world = BoneTrsArray[PolyGrp_array[p].singleBindName]
                     context.scene.cursor_location = BoneTrsArray[PolyGrp_array[p].singleBindName].to_translation()
                     bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
@@ -979,12 +982,6 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
     remove_doubles = bpy.props.BoolProperty(
             name="Remove Doubles",
             description="Remove duplicate vertices",
-            default=False,
-            )
-
-    connect_bones = bpy.props.BoolProperty(
-            name="Connected Bones",
-            description="Attach the head of every bone to their parent tail, except for the parent itself",
             default=False,
             )
 
