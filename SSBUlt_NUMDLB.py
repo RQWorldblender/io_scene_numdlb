@@ -2,14 +2,14 @@
 
 """
 Name: 'Super Smash Bros. Ultimate Model Importer (.numdlb)...'
-Blender: 270
+Blender: 277
 Group: 'Import'
 Tooltip: 'Import *.NUMDLB (.numdlb)'
 """
 
 __author__ = ["Richard Qian (Worldblender)", "Random Talking Bush", "Ploaj"]
 __url__ = ["https://gitlab.com/Worldblender/io_scene_numdlb"]
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __bpydoc__ = """\
 """
 
@@ -17,8 +17,8 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Model Importer",
     "description": "Imports data referenced by NUMDLB files (binary model format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Random Talking Bush, Ploaj",
-    "version": (1, 1, 0),
-    "blender": (2, 7, 0),
+    "version": (1, 2, 0),
+    "blender": (2, 77, 0),
     "api": 31236,
     "location": "File > Import",
     "warning": '', # used for warning icon and text in addons panel

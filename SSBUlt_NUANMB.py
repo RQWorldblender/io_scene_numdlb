@@ -2,14 +2,14 @@
 
 """
 Name: 'Super Smash Bros. Ultimate Animation Importer (.nuanmb)...'
-Blender: 270
+Blender: 277
 Group: 'Import'
 Tooltip: 'Import *.NUANMB (.nuanmb)'
 """
 
 __author__ = ["Richard Qian (Worldblender)", "Ploaj"]
 __url__ = ["https://gitlab.com/Worldblender/io_scene_numdlb"]
-__version__ = "0.99.0"
+__version__ = "1.2.0"
 __bpydoc__ = """\
 """
 
@@ -17,8 +17,8 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Animation Importer",
     "description": "Imports animation data from NUANMB files (binary animation format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Ploaj",
-    "version": (0, 99, 0),
-    "blender": (2, 7, 0),
+    "version": (1, 2, 0),
+    "blender": (2, 77, 0),
     "api": 31236,
     "location": "File > Import",
     "warning": 'Applying animations to non-matching armatures will likely cause meshes to deform incorrectly ', # used for warning icon and text in addons panel
@@ -134,7 +134,7 @@ def lerp(av, bv, v0, v1, factor):
     mu = (factor - v0) / (v1 - v0)
     return (av * (1 - mu)) + (bv * mu)
 
-def getAnimationInfo(self, context, filepath, import_method, read_transform, read_material, read_visibility, read_camera):
+def getAnimationInfo(self, context, filepath, read_transform, read_material, read_visibility, read_camera):
     # Semi-global variables used by this function's hierarchy; cleared every time this function runs
     global AnimName; AnimName = ""
     GroupCount = 0
@@ -226,7 +226,7 @@ def getAnimationInfo(self, context, filepath, import_method, read_transform, rea
                     readAnimations(io.BytesIO(am.read(BufferSize)))
 
                     # Now get the data into Blender
-                    importAnimations(context, import_method, read_transform, read_material, read_visibility, read_camera)
+                    importAnimations(context, read_transform, read_material, read_visibility, read_camera)
 
                 else:
                     raise RuntimeError("%s is not a valid NUANMB file." % animPath)
@@ -448,7 +448,7 @@ def readCompressedData(aq, track):
             track.animations.append(values)
 
 # This function deals with all of the Blender-specific operations
-def importAnimations(context, import_method, read_transform, read_material, read_visibility, read_camera):
+def importAnimations(context, read_transform, read_material, read_visibility, read_camera):
     obj = bpy.context.object
     bpy.ops.object.mode_set(mode='POSE', toggle=False)
 
@@ -463,32 +463,17 @@ def importAnimations(context, import_method, read_transform, read_material, read
     except:
         obj.animation_data_create()
 
-    # If import method is set to create new actions for every animation (default)
-    if (import_method == "create_new"):
-        action = bpy.data.actions.new(AnimName)
-        obj.animation_data.action = action
-        obj.animation_data.action.use_fake_user = True
+    action = bpy.data.actions.new(AnimName)
+    obj.animation_data.action = action
+    obj.animation_data.action.use_fake_user = True
 
-        # Animation frames start at 1, the same as what Blender uses by default
-        context.scene.frame_start = 1
-        sm = action.pose_markers.new(AnimName + "-start")
-        sm.frame = context.scene.frame_start
-        context.scene.frame_end = FrameCount + 1
-        em = action.pose_markers.new(AnimName + "-end")
-        em.frame = context.scene.frame_end
-
-    # If import method is set to append to the current action for every animation
-    elif (import_method == "append_current"):
-        # Animation frames start at 1, the same as what Blender uses by default
-        action = obj.animation_data.action
-        context.scene.frame_current = context.scene.frame_end # Jump to end of current action
-        context.scene.frame_end += FrameCount + 1
-        newStart = context.scene.frame_current + 1
-        context.scene.frame_current = newStart # Jump to beginning of new action
-        sm = action.pose_markers.new(AnimName + "-start")
-        sm.frame = newStart
-        em = action.pose_markers.new(AnimName + "-end")
-        em.frame = context.scene.frame_end
+    # Animation frames start at 1, the same as what Blender uses by default
+    context.scene.frame_start = 1
+    sm = action.pose_markers.new(AnimName + "-start")
+    sm.frame = context.scene.frame_start
+    context.scene.frame_end = FrameCount + 1
+    em = action.pose_markers.new(AnimName + "-end")
+    em.frame = context.scene.frame_end
 
     for ag in AnimGroups.items():
         if (read_transform and ag[0] == AnimType.Transform.value):
@@ -510,7 +495,7 @@ def importAnimations(context, import_method, read_transform, read_material, read
                 # Iterate through the bone order in selected armature, and transform each of them
                 for tbone in obj.pose.bones:
                     if (tbone.name in tfmArray):
-                        print(tbone.name + " | Animation matrix: " + str(tfmArray[tbone.name].transposed()))
+                        # print(tbone.name + " | Animation matrix: " + str(tfmArray[tbone.name].transposed()))
                         if (tbone.parent):
                             tbone.matrix = tbone.parent.matrix * tfmArray[tbone.name]
                         else:
@@ -591,14 +576,6 @@ class NUANMB_Import_Operator(bpy.types.Operator, ImportHelper):
     filter_glob = bpy.props.StringProperty(default="*.nuanmb", options={'HIDDEN'})
     files = bpy.props.CollectionProperty(type=bpy.types.OperatorFileListElement)
 
-    import_method = bpy.props.EnumProperty(
-            name="Import Method",
-            description="How to import animations",
-            items=(("create_new", "Create new actions", "Animations will be imported as their own actions"),
-                   ("append_current", "Append to current", "Animations will be imported to the current action, one after another")),
-            default="create_new",
-            )
-
     read_transform = bpy.props.BoolProperty(
             name="Transformation Tracks",
             description="Read transformation data",
@@ -637,13 +614,6 @@ class NUANMB_Import_Operator(bpy.types.Operator, ImportHelper):
         if context.active_object is not None:
             if (context.active_object.type == 'ARMATURE'):
                 return True
-
-            # Currently Disabled
-            """
-            elif context.active_object.parent is not None:
-                return context.active_object.parent.type == 'ARMATURE'
-            """
-
         return False
 
 # Add to a menu

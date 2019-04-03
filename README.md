@@ -1,15 +1,15 @@
 # Super Smash Bros. Ultimate model and animation importers for Blender (io_scene_numdlb)
 Imports data referenced by NUMDLB files and NUANMB files (binary model and animation formats used by some games developed by Bandai-Namco). May work for other games using the same format. Unlike the original MAXScript, this set of scripts is cross-platform, as they will work on any operating system that Blender and Python exist for. The readability in the rewritten model importer script is also improved, with the main function split into several smaller ones.
 
-**The model importer script is now ready for daily use, but the animation importer script is not yet (it can read and import most data, but transformations are not correct). There are a few limitations in the model importer script:**
+**Both the model importer script and the animation importer script are now ready for daily use. There are a few limitations in both scripts:**
 
 * Vertex colors are set, but the alpha channel is not used, as there is no way to set it within the Blender UI.
 
-* Animations imported from files may cause meshes to deform incorrectly, most likely because bone roll is not yet properly recalculated.
+* Models must have their bone axises aligned, or animations will cause meshes to deform incorrectly. Models imported with the NUMDLB importer script and SMD (Valve Source Model) importer script take this into account.
 
 * The following kinds of textures are read, but currently not imported (the Cycles and EEVEE (2.80 and later) rendering engines may support them however):
     * Normal maps
-    * PRM maps
+    * PRM maps (Used with Principled BSDF shaders)
     * Emissive maps
 
 ## Where to obtain assets
@@ -22,7 +22,7 @@ Imports data referenced by NUMDLB files and NUANMB files (binary model and anima
 * PNG textures: <https://gitlab.com/Worldblender/smash-ultimate-textures>
 
 ## Installation
-This set of two scripts requires Blender 2.70 or later, but only 2.79 has been tested.
+This set of two scripts requires Blender 2.77 or later, but only 2.79 has been tested.
 
 1. Clone or download this repository. If downloaded, extract the files after that.
 
