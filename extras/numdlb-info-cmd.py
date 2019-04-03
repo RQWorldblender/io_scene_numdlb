@@ -59,7 +59,7 @@ class WeightData:
     def __init__(self, boneIDs, weights):
         self.boneIDs = boneIDs
         self.weights = weights
-    
+
     def __repr__(self):
         return "Bone IDs: " + str(self.boneIDs) + "\t| Weights: " + str(self.weights) + "\n"
 
@@ -308,7 +308,7 @@ def importSkeleton(SKTName):
                 m11 = struct.unpack('<f', b.read(4))[0]; m12 = struct.unpack('<f', b.read(4))[0]; m13 = struct.unpack('<f', b.read(4))[0]; m14 = struct.unpack('<f', b.read(4))[0]
                 m21 = struct.unpack('<f', b.read(4))[0]; m22 = struct.unpack('<f', b.read(4))[0]; m23 = struct.unpack('<f', b.read(4))[0]; m24 = struct.unpack('<f', b.read(4))[0]
                 m31 = struct.unpack('<f', b.read(4))[0]; m32 = struct.unpack('<f', b.read(4))[0]; m33 = struct.unpack('<f', b.read(4))[0]; m34 = struct.unpack('<f', b.read(4))[0]
-                m41 = struct.unpack('<f', b.read(4))[0]; m42 = struct.unpack('<f', b.read(4))[0]; m43 = struct.unpack('<f', b.read(4))[0]; m44 = struct.unpack('<f', b.read(4))[0]        
+                m41 = struct.unpack('<f', b.read(4))[0]; m42 = struct.unpack('<f', b.read(4))[0]; m43 = struct.unpack('<f', b.read(4))[0]; m44 = struct.unpack('<f', b.read(4))[0]
                 tfm = mathutils.Matrix([[m11, m21, m31, m41], [m12, m22, m32, m42], [m13, m23, m33, m43], [m14, m24, m34, m44]])
                 BoneTrsArray[BoneName_array[c]] = tfm
                 if print_debug_info:
@@ -318,6 +318,27 @@ def importSkeleton(SKTName):
                 BoneArray.append(BoneName_array[c])
                 if (BoneParent_array[c] != 65535):
                     print(BoneName_array[BoneParent_array[c]])
+
+            # Calculate the length for every bone, so that they will not be removed
+            maxs = [0, 0, 0]
+            mins = [0, 0, 0]
+            for bone in BoneName_array:
+                for i in range(3):
+                        maxs[i] = max(maxs[i], BoneTrsArray[bone].to_translation()[i])
+                        mins[i] = min(mins[i], BoneTrsArray[bone].to_translation()[i])
+
+            dimensions = []
+            for i in range(3):
+                    dimensions.append(maxs[i] - mins[i])
+
+            length = max(0.001, (dimensions[0] + dimensions[1] + dimensions[2]) / 600)
+            print("Dimensions: " + str(dimensions))
+            print("Expected bone length: " + str(length))
+
+            for bone in BoneName_array:
+                tailLength = BoneTrsArray[bone].to_translation() + mathutils.Vector(length for i in range(3))
+                print(bone + " | Head location: " + str(BoneTrsArray[bone].to_translation()))
+                print(bone + " | Tail location: " + str(tailLength))
 
 # Imports the meshes
 def importMeshes(MSHName):
@@ -529,7 +550,7 @@ def importMeshes(MSHName):
                                         print("Importing more than 5 UV sets is not supported, not reading any more.")
                     else:
                         UV_array.append([0,0])
-                    
+
                     # Read vertex color data
                     if (ColorCount >= 1):
                         colorr = float(struct.unpack('<B', f.read(1))[0]) / 128
@@ -648,7 +669,7 @@ def importMeshes(MSHName):
                 #print(findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
                 #print(findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
 
-modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/body/c00/model.numdlb"
+modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/mario/c00/model.numdlb"
 #modelpath = "/opt/Smash Ultimate Models/fighter/packun/model/body/c00/model.numdlb"
 
 time_start = time.time()

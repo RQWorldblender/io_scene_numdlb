@@ -397,20 +397,19 @@ def importSkeleton(context, SKTName, create_rest_action):
                 mr3 = [m14, m24, m34, m44]
                 tfm = mathutils.Matrix([mr0, mr1, mr2, mr3])
                 BoneTrsArray[BoneName_array[c]] = tfm
-                print("Matrix for " + BoneName_array[c] + ":\n" + str(tfm))
-                print(tfm.decompose())
+                # print("Matrix for " + BoneName_array[c] + ":\n" + str(tfm))
+                # print(tfm.decompose())
 
                 newBone = skel.data.edit_bones.new(BoneName_array[c])
-                newBone.matrix = tfm
+                newBone.transform(tfm, scale=True, roll=False)
 
                 # Bones must a be non-zero length, or Blender will eventually remove them
-                newBone.tail = (newBone.head.x, newBone.head.y + 0.01, newBone.head.z)
+                newBone.tail = (newBone.head.x, newBone.head.y + 0.001, newBone.head.z)
                 newBone.use_deform = True
                 newBone.use_inherit_rotation = True
                 newBone.use_inherit_scale = True
 
                 # Store the original matrix rows as custom properties in bones so that they can be reused during animation transformation
-                # These properties should not be changed or removed, or scripts that read from them will fail
                 newBone['matrow0'] = mr0
                 newBone['matrow1'] = mr1
                 newBone['matrow2'] = mr2
@@ -425,6 +424,24 @@ def importSkeleton(context, SKTName, create_rest_action):
                     except:
                         # If parent bone can't be found
                         continue
+
+            # Calculate the length for every bone, so that they will not be removed
+            maxs = [0, 0, 0]
+            mins = [0, 0, 0]
+            for bone in BoneName_array:
+                for i in range(3):
+                        maxs[i] = max(maxs[i], BoneTrsArray[bone].to_translation()[i])
+                        mins[i] = min(mins[i], BoneTrsArray[bone].to_translation()[i])
+            # Get armature dimensions
+            dimensions = []
+            for i in range(3):
+                dimensions.append(maxs[i] - mins[i])
+
+            length = max(0.001, (dimensions[0] + dimensions[1] + dimensions[2]) / 600) # very small indeed, but usage of the stick visualization still lets the bones be reasonably visible
+
+            for bone in skel.data.edit_bones:
+                bone.matrix = BoneTrsArray[bone.name]
+                bone.tail = bone.head + (bone.tail - bone.head).normalized() * length
 
             if create_rest_action:
                 # Enter pose mode, and then create an action containing the rest pose if enabled
@@ -445,9 +462,6 @@ def importSkeleton(context, SKTName, create_rest_action):
                 for bone in skel.pose.bones:
                     bone.matrix_basis.identity()
                     bone.rotation_mode = 'QUATERNION'
-                    curvesPos = []
-                    curvesRot = []
-                    curvesSca = []
                     """
                     List of fcurve types:
                     * 'location'
