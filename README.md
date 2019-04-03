@@ -7,6 +7,8 @@ Imports data referenced by NUMDLB files and NUANMB files (binary model and anima
 
 * Models must have their bone axises aligned, or animations will cause meshes to deform incorrectly. Models imported with the NUMDLB importer script and SMD (Valve Source Model) importer script take this into account.
 
+* Only transform and visibility tracks are supported by the NUANMB importer. Material and camera tracks are currently unsupported.
+
 * The following kinds of textures are read, but currently not imported (the Cycles and EEVEE (2.80 and later) rendering engines may support them however):
     * Normal maps
     * PRM maps (Used with Principled BSDF shaders)

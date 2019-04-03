@@ -1,10 +1,4 @@
 import bpy
-#Rotate and Scale Armature
-bpy.ops.object.select_all(action='TOGGLE')
-bpy.ops.object.select_pattern(pattern="*Armature*")
-bpy.ops.transform.resize(value=(8, 8, 8), constraint_orientation='GLOBAL', mirror=False, proportional='DISABLED', proportional_edit_falloff='SMOOTH', proportional_size=1)
-bpy.ops.transform.rotate(value=1.5708, axis=(1, 0, 0), constraint_axis=(True, False, False), constraint_orientation='GLOBAL', mirror=False, proportional='DISABLED', proportional_edit_falloff='SMOOTH', proportional_size=1)
-bpy.ops.object.select_all(action='TOGGLE')
 #Select Expressions
 bpy.ops.object.select_pattern(pattern="*Blink*")
 bpy.ops.object.select_pattern(pattern="*Attack*")
@@ -28,6 +22,11 @@ bpy.ops.object.select_pattern(pattern="*Bound*")
 bpy.ops.object.select_pattern(pattern="*Down*")
 bpy.ops.object.select_pattern(pattern="*Final*")
 bpy.ops.object.select_pattern(pattern="*Result*")
+bpy.ops.object.select_pattern(pattern="*Sorori*")
+bpy.ops.object.select_pattern(pattern="*Fall*")
+bpy.ops.object.select_pattern(pattern="*Appeal*")
+bpy.ops.object.select_pattern(pattern="*DamageFlyFront*")
+bpy.ops.object.select_pattern(pattern="*CameraHit*")
 #Move to another Layer
 bpy.ops.object.move_to_layer(layers=(False, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False))
 bpy.context.scene.layers[1] = True
