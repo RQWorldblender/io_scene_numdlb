@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2019-04-04
+* Fix image-loading method so that it does not error out on Windows systems
+* Mesh cleanup script now changes image filepaths to be relative to saved Blender files
+
 ## [1.2.0] - 2019-04-03
 * NUANMB importer script is now declared stable/ready-to-use, as the model importer has been fixed to properly support it.
 * Bump minimum Blender version to 2.77, based on information in <https://blender.stackexchange.com/q/63116>.

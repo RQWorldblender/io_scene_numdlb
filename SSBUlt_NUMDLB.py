@@ -26,7 +26,8 @@ bl_info = {
     "tracker_url": "https://gitlab.com/Worldblender/io_scene_numdlb/issues",
     "category": "Import-Export"}
 
-import bmesh, bpy, bpy_extras, math, mathutils, os, struct, sys, time
+import bmesh, bpy, math, mathutils, os, struct, sys, time
+from bpy_extras import image_utils
 
 def reinterpretCastIntToFloat(int_val):
     return struct.unpack('f', struct.pack('I', int_val))[0]
@@ -298,7 +299,7 @@ def importMaterials(MATName, image_transparency, texture_ext):
                     else:
                         tex = bpy.data.textures.new(Materials_array[m].color1Name, type='IMAGE')
 
-                    img = bpy_extras.image_utils.load_image(Materials_array[m].color1Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
+                    img = image_utils.load_image(Materials_array[m].color1Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
                     img.use_alpha = image_transparency
                     tex.image = img
 
@@ -313,7 +314,7 @@ def importMaterials(MATName, image_transparency, texture_ext):
                     else:
                         altTex = bpy.data.textures.new(Materials_array[m].color2Name, type='IMAGE')
 
-                    altImg = bpy_extras.image_utils.load_image(Materials_array[m].color2Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
+                    altImg = image_utils.load_image(Materials_array[m].color2Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
                     altImg.use_alpha = image_transparency
                     altTex.image = altImg
 

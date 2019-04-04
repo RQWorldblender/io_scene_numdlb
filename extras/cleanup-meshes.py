@@ -1,5 +1,6 @@
-import bpy
-#Select Expressions
+import bpy, os
+
+# Select Expressions
 bpy.ops.object.select_pattern(pattern="*Blink*")
 bpy.ops.object.select_pattern(pattern="*Attack*")
 bpy.ops.object.select_pattern(pattern="*Ouch*")
@@ -27,7 +28,7 @@ bpy.ops.object.select_pattern(pattern="*Fall*")
 bpy.ops.object.select_pattern(pattern="*Appeal*")
 bpy.ops.object.select_pattern(pattern="*DamageFlyFront*")
 bpy.ops.object.select_pattern(pattern="*CameraHit*")
-#Move to another Layer
+# Move to another Layer
 bpy.ops.object.move_to_layer(layers=(False, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False))
 bpy.context.scene.layers[1] = True
 bpy.ops.object.select_all(action='TOGGLE')
@@ -36,9 +37,16 @@ bpy.ops.object.select_pattern(pattern="*FaceN*")
 bpy.ops.object.move_to_layer(layers=(True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False))
 bpy.ops.object.select_all(action='TOGGLE')
 bpy.context.scene.layers[1] = False
-#Deselect all
+
+# Deselect all
 for obj in bpy.data.objects:
     obj.select = False
-#Move Armature to separate layer
+
+# Move Armature to separate layer
 bpy.ops.object.select_pattern(pattern="*Armature*")
 bpy.ops.object.move_to_layer(layers=(False, False, False, False, False, False, False, False, False, False, True, False, False, False, False, False, False, False, False, False))
+
+# Change image filepaths to be relative to the Blender file
+for image in bpy.data.images:
+    filename = os.path.basename(image.filepath)
+    image.filepath = os.path.join("//", filename)
