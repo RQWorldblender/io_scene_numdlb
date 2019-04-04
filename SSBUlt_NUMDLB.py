@@ -9,7 +9,7 @@ Tooltip: 'Import *.NUMDLB (.numdlb)'
 
 __author__ = ["Richard Qian (Worldblender)", "Random Talking Bush", "Ploaj"]
 __url__ = ["https://gitlab.com/Worldblender/io_scene_numdlb"]
-__version__ = "1.2.1"
+__version__ = "1.2.2"
 __bpydoc__ = """\
 """
 
@@ -17,7 +17,7 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Model Importer",
     "description": "Imports data referenced by NUMDLB files (binary model format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Random Talking Bush, Ploaj",
-    "version": (1, 2, 1),
+    "version": (1, 2, 2),
     "blender": (2, 77, 0),
     "api": 31236,
     "location": "File > Import",
@@ -207,8 +207,8 @@ def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_
 
         # Rotate armature if option is enabled
         if auto_rotate:
-            bpy.ops.object.select_all(action='TOGGLE')
-            bpy.ops.object.select_pattern(pattern="*Armature*")
+            bpy.ops.object.select_all(action='DESELECT')
+            bpy.ops.object.select_pattern(pattern=armaName)
             bpy.ops.transform.rotate(value=math.radians(90), axis=(1, 0, 0), constraint_axis=(True, False, False), constraint_orientation='GLOBAL', mirror=False, proportional='DISABLED', proportional_edit_falloff='SMOOTH', proportional_size=1)
             bpy.ops.object.select_all(action='TOGGLE')
 
@@ -954,13 +954,11 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
 
                 # Apply matrix transformation to single-binding meshes
                 if (PolyGrp_array[p].singleBindName != ""):
-                    obj['singlebind'] = PolyGrp_array[p].singleBindName
-                    obj.matrix_world = BoneTrsArray[PolyGrp_array[p].singleBindName]
-                    context.scene.cursor_location = BoneTrsArray[PolyGrp_array[p].singleBindName].to_translation()
-                    bpy.ops.object.origin_set(type='ORIGIN_CURSOR')
-                    context.scene.cursor_location = [0.0, 0.0, 0.0]
+                    singlebone = PolyGrp_array[p].singleBindName
+                    obj['singlebind'] = singlebone
+                    obj.matrix_world = BoneTrsArray[singlebone]
 
-                bpy.ops.object.select_all(action="DESELECT")
+                bpy.ops.object.select_all(action='DESELECT')
                 obj.select = True
                 context.scene.objects.active = obj
                 bpy.ops.object.shade_smooth()

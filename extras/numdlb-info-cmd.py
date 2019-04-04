@@ -590,6 +590,9 @@ def importMeshes(MSHName):
 
                 if print_debug_info:
                     print(PolyGrp_array[p].visGroupName + " UV end: " + str(f.tell()))
+                print("UVmap 0: " + str(UV_array))
+                #print("Color: " + str(Color_array))
+                #print("Alpha: " + str(Alpha_array))
                 # Read face data
                 f.seek(FaceBuffOffset + PolyGrp_array[p].facepointStart, 0)
                 if print_debug_info:
@@ -669,8 +672,9 @@ def importMeshes(MSHName):
                 #print(findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
                 #print(findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
 
-modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/mario/c00/model.numdlb"
+#modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/mario/c00/model.numdlb"
 #modelpath = "/opt/Smash Ultimate Models/fighter/packun/model/body/c00/model.numdlb"
+modelpath = "/media/richard/3AEE25744CE0956E/Smash Ultimate Models/assist/jiro/model/body/c00/model.numdlb"
 
 time_start = time.time()
 getModelInfo(modelpath)
