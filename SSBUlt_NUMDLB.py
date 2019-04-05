@@ -9,7 +9,7 @@ Tooltip: 'Import *.NUMDLB (.numdlb)'
 
 __author__ = ["Richard Qian (Worldblender)", "Random Talking Bush", "Ploaj"]
 __url__ = ["https://gitlab.com/Worldblender/io_scene_numdlb"]
-__version__ = "1.2.2"
+__version__ = "1.3.0"
 __bpydoc__ = """\
 """
 
@@ -17,7 +17,7 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Model Importer",
     "description": "Imports data referenced by NUMDLB files (binary model format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Random Talking Bush, Ploaj",
-    "version": (1, 2, 2),
+    "version": (1, 3, 0),
     "blender": (2, 77, 0),
     "api": 31236,
     "location": "File > Import",
@@ -140,7 +140,7 @@ def readVarLenString(file):
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
-def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles, create_rest_action, auto_rotate):
+def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles, allow_black, create_rest_action, auto_rotate):
     # Semi-global variables used by this function's hierarchy; cleared every time this function runs
     global dirPath; dirPath = ""
     global MODLName; MODLName = ""
@@ -203,7 +203,7 @@ def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_
         if os.path.isfile(SKTName):
             importSkeleton(context, SKTName, create_rest_action)
         if os.path.isfile(MSHName):
-            importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles)
+            importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles, allow_black)
 
         # Rotate armature if option is enabled
         if auto_rotate:
@@ -231,11 +231,7 @@ def importMaterials(MATName, image_transparency, texture_ext):
                 MATShdrNameOff = mt.tell() + struct.unpack('<L', mt.read(4))[0]; mt.seek(0x04, 1)
                 MATRet = mt.tell()
                 mt.seek(MATNameOff, 0)
-                materialNameBuffer = []
-                while('\\' not in materialNameBuffer):
-                    materialNameBuffer.append(str(mt.read(1))[2:3])
-                del materialNameBuffer[-1]
-                pe.materialName = ''.join(materialNameBuffer)
+                pe.materialName = readVarLenString(mt)
                 print("Textures for " + pe.materialName + ":")
                 mt.seek(MATParamGrpOff, 0)
                 for p in range(MATParamGrpCount):
@@ -463,13 +459,6 @@ def importSkeleton(context, SKTName, create_rest_action):
                 for bone in skel.pose.bones:
                     bone.matrix_basis.identity()
                     bone.rotation_mode = 'QUATERNION'
-                    """
-                    List of fcurve types:
-                    * 'location'
-                    * 'rotation_euler'
-                    * 'rotation_quaternion'
-                    * 'scale'
-                    """
 
                     # First, create position keyframes
                     skel.keyframe_insert(data_path='pose.bones["%s"].%s' %
@@ -492,7 +481,7 @@ def importSkeleton(context, SKTName, create_rest_action):
             bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
 # Imports the meshes
-def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles):
+def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles, allow_black):
     PolyGrp_array = []
     WeightGrp_array = []
 
@@ -520,8 +509,7 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
             nameCounter = 0
             for g in range(PolyGrpCount):
                 ge = PolygonGroupData()
-                VisGrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
-                f.seek(0x04, 1)
+                VisGrpNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x08, 1)
                 Unk1 = struct.unpack('<L', f.read(4))[0]
                 SingleBindNameOffset = f.tell() + struct.unpack('<L', f.read(4))[0]; f.seek(0x04, 1)
                 ge.verticeCount = struct.unpack('<L', f.read(4))[0]
@@ -557,7 +545,6 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                 f.seek(SingleBindNameOffset, 0)
                 ge.singleBindName = readVarLenString(f)
                 PolyGrp_array.append(ge)
-                # print(ge.visGroupName + " unknowns: 1: " + str(Unk1) + "\t| Off1: " + str(UnkOff1) + "\t| 2: " + str(Unk2) + "\t| 3: " + str(Unk3) + "\t| 4: " + str(Unk4) + "\t| 5: " + str(Unk5) + "\t| 6: " + str(Unk6) + "\t| LongFace: " + str(ge.faceLongBit) + "\t| 8: " + str(Unk8) + "\t| Sort: " + str(SortPriority) + "\t| 9: " + str(Unk9) + "\t| 10: " + str(Unk10))
                 f.seek(PolyGrpRet, 0)
 
             print(PolyGrp_array)
@@ -599,9 +586,9 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
             for p in range(PolyGrpCount):
                 Vert_array = []
                 Normal_array = []
-                Color_array = []; Color2_array = []; Color3_array = []; Color4_array = []; Color5_array = []
-                Alpha_array = []; Alpha2_array = []; Alpha3_array = []; Alpha4_array = []; Alpha5_array = []
-                UV_array = []; UV2_array = []; UV3_array = []; UV4_array = []; UV5_array = []
+                Color_array = {}
+                Alpha_array = {}
+                UV_array = {}
                 Face_array = []
                 Weight_array = []
                 SingleBindID = 0
@@ -659,9 +646,13 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                     elif (BuffName == "Tangent0"):
                         TanFmt = BuffParamFmt
                     elif (BuffName == "map1" or BuffName == "uvSet" or BuffName == "uvSet1" or BuffName == "uvSet2" or BuffName == "bake1"):
+                        UV_array[UVCount] = []
                         UVCount += 1
                     elif (BuffName == "colorSet1" or BuffName == "colorSet2" or BuffName == "colorSet2_1" or BuffName == "colorSet2_2" or BuffName == "colorSet2_3" or BuffName == "colorSet3" or BuffName == "colorSet4" or BuffName == "colorSet5" or BuffName == "colorSet6" or BuffName == "colorSet7"):
+                        Color_array[ColorCount] = []
+                        Alpha_array[ColorCount] = []
                         ColorCount += 1
+
                     else:
                         raise RuntimeError("Unknown format!")
                     f.seek(BuffParamRet, 0)
@@ -701,70 +692,32 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                 print(PolyGrp_array[p].visGroupName + " UV start: " + str(f.tell()))
                 for v in range(PolyGrp_array[p].verticeCount):
                     # Read UV map data if option is enabled
-                    if use_uv_maps:
-                        if (UVCount >= 1):
+                    if (use_uv_maps and UVCount >= 1):
+                        for uv in range(UVCount):
                             tu = decompressHalfFloat(f.read(2))
                             tv = (decompressHalfFloat(f.read(2)) * -1) + 1
-                            UV_array.append([tu,tv])
-                            if (UVCount >= 2):
-                                tu2 = decompressHalfFloat(f.read(2))
-                                tv2 = (decompressHalfFloat(f.read(2)) * -1) + 1
-                                UV2_array.append([tu2,tv2])
-                                if (UVCount >= 3):
-                                    tu3 = decompressHalfFloat(f.read(2))
-                                    tv3 = (decompressHalfFloat(f.read(2)) * -1) + 1
-                                    UV3_array.append([tu3,tv3])
-                                    if (UVCount >= 4):
-                                        tu4 = decompressHalfFloat(f.read(2))
-                                        tv4 = (decompressHalfFloat(f.read(2)) * -1) + 1
-                                        UV4_array.append([tu4,tv4])
-                                        if (UVCount >= 5):
-                                            tu5 = decompressHalfFloat(f.read(2))
-                                            tv5 = (decompressHalfFloat(f.read(2)) * -1) + 1
-                                            UV5_array.append([tu5,tv5])
-                                            if (UVCount >= 6):
-                                                print("Importing more than 5 UV sets is not supported, not reading any more.")
-                        else:
-                            UV_array.append([0,0])
+                            UV_array[uv].append([tu, tv])
+
                     # Read vertex color data if option is enabled
-                    if use_vertex_colors:
-                        if (ColorCount >= 1):
+                    if (use_vertex_colors and ColorCount >= 1):
+                        for color in range(ColorCount):
                             colorr = float(struct.unpack('<B', f.read(1))[0]) / 128
                             colorg = float(struct.unpack('<B', f.read(1))[0]) / 128
                             colorb = float(struct.unpack('<B', f.read(1))[0]) / 128
                             colora = float(struct.unpack('<B', f.read(1))[0]) / 128
-                            Color_array.append([colorr,colorg,colorb]); Alpha_array.append(colora)
-                            if (ColorCount >= 2):
-                                colorr2 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                colorg2 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                colorb2 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                Color2_array.append([colorr2,colorg2,colorb2]); Alpha2_array.append(colora2)
-                                if (ColorCount >= 3):
-                                    colorr3 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                    colorg3 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                    colorb3 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                    colora3 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                    Color3_array.append([colorr3,colorg3,colorb3]); Alpha3_array.append(colora3)
-                                    if (ColorCount >= 4):
-                                        colorr4 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                        colorg4 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                        colorb4 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                        colora4 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                        Color4_array.append([colorr4,colorg4,colorb4]); Alpha4_array.append(colora4)
-                                        if (ColorCount >= 5):
-                                            colorr5 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                            colorg5 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                            colorb5 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                            colora5 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                            Color5_array.append([colorr5,colorg5,colorb5]); Alpha5_array.append(colora5)
-                                            if (ColorCount >= 6):
-                                                print("Importing more than 5 vertex color sets is not supported, not reading any more.")
-                        else:
-                            Color_array.append([1.0,1.0,1.0])
-                            Alpha_array.append(1.0)
+                            Color_array[color].append([colorr,colorg,colorb])
+                            Alpha_array[color].append(colora)
 
                 print(PolyGrp_array[p].visGroupName + " UV end: " + str(f.tell()))
+                # Search for duplicate UV coordinates and make them unique so that Blender will not remove them
+                if (len(UV_array) > 0):
+                    for uvmap in UV_array.values():
+                        for uvcoorda in range(0, len(uvmap) - 1):
+                            count = uvcoorda
+                            for uvcoordb in range(count + 1, len(uvmap)):
+                                if (uvmap[uvcoordb] == uvmap[uvcoorda]):
+                                    uvmap[uvcoordb][0] += 0.000000000000001
+                                    uvmap[uvcoordb][1] += 0.000000000000001
 
                 # Read face data
                 f.seek(FaceBuffOffset + PolyGrp_array[p].facepointStart, 0)
@@ -859,38 +812,18 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                 bm.verts.index_update()
 
                 if (use_vertex_colors and ColorCount > 0):
-                    if (len(Color_array) > 0):
-                        color_layer = bm.loops.layers.color.new()
-                        alpha_layer = bm.loops.layers.float.new()
-                    if (len(Color2_array) > 0):
-                        color_layer_2 = bm.loops.layers.color.new()
-                        alpha_layer_2 = bm.loops.layers.float.new()
-                    if (len(Color3_array) > 0):
-                        color_layer_3 = bm.loops.layers.color.new()
-                        alpha_layer_3 = bm.loops.layers.float.new()
-                    if (len(Color4_array) > 0):
-                        color_layer_4 = bm.loops.layers.color.new()
-                        alpha_layer_4 = bm.loops.layers.float.new()
-                    if (len(Color5_array) > 0):
-                        color_layer_5 = bm.loops.layers.color.new()
-                        alpha_layer_5 = bm.loops.layers.float.new()
+                    colorLayers = []
+                    alphaLayers = []
+                    for c in range(len(Color_array)):
+                        colorLayers.append(bm.loops.layers.color.new())
+                        alphaLayers.append(bm.loops.layers.float.new())
 
                 if (use_uv_maps and UVCount > 0):
-                    if (len(UV_array) > 0):
-                        uv_layer = bm.loops.layers.uv.new()
-                        tex_layer = bm.faces.layers.tex.new()
-                    if (len(UV2_array) > 0):
-                        uv_layer_2 = bm.loops.layers.uv.new()
-                        tex_layer_2 = bm.faces.layers.tex.new()
-                    if (len(UV3_array) > 0):
-                        uv_layer_3 = bm.loops.layers.uv.new()
-                        tex_layer_3 = bm.faces.layers.tex.new()
-                    if (len(UV4_array) > 0):
-                        uv_layer_4 = bm.loops.layers.uv.new()
-                        tex_layer_4 = bm.faces.layers.tex.new()
-                    if (len(UV5_array) > 0):
-                        uv_layer_5 = bm.loops.layers.uv.new()
-                        tex_layer_5 = bm.faces.layers.tex.new()
+                    uvLayers = []
+                    texLayers = []
+                    for u in range(len(UV_array)):
+                        uvLayers.append(bm.loops.layers.uv.new())
+                        texLayers.append(bm.faces.layers.tex.new())
 
                 for face in range(len(Face_array)):
                     p0 = Face_array[face][0] - 1
@@ -905,32 +838,16 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                 for surface in bm.faces:
                     for loop in surface.loops:
                         if (use_vertex_colors and ColorCount > 0):
-                            if (len(Color_array) > 0):
-                                loop[color_layer] = Color_array[loop.vert.index]
-                                loop[alpha_layer] = Alpha_array[loop.vert.index]
-                            if (len(Color2_array) > 0):
-                                loop[color_layer_2] = Color2_array[loop.vert.index]
-                                loop[alpha_layer_2] = Alpha2_array[loop.vert.index]
-                            if (len(Color3_array) > 0):
-                                loop[color_layer_3] = Color3_array[loop.vert.index]
-                                loop[alpha_layer_3] = Alpha3_array[loop.vert.index]
-                            if (len(Color4_array) > 0):
-                                loop[color_layer_4] = Color4_array[loop.vert.index]
-                                loop[alpha_layer_4] = Alpha4_array[loop.vert.index]
-                            if (len(Color5_array)> 0):
-                                loop[color_layer_5] = Color5_array[loop.vert.index]
-                                loop[alpha_layer_5] = Alpha5_array[loop.vert.index]
+                            for c in range(ColorCount):
+                                if (Color_array[c][loop.vert.index] == [0.0, 0.0, 0.0] and not allow_black):
+                                    loop[colorLayers[c]] = [1.0, 1.0, 1.0]
+                                else:
+                                    loop[colorLayers[c]] = Color_array[c][loop.vert.index]
+                                loop[alphaLayers[c]] = Alpha_array[c][loop.vert.index]
+
                         if (use_uv_maps and UVCount > 0):
-                            if (len(UV_array) > 0):
-                                loop[uv_layer].uv = UV_array[loop.vert.index]
-                            if (len(UV2_array) > 0):
-                                loop[uv_layer_2].uv = UV2_array[loop.vert.index]
-                            if (len(UV3_array) > 0):
-                                loop[uv_layer_3].uv = UV3_array[loop.vert.index]
-                            if (len(UV4_array) > 0):
-                                loop[uv_layer_4].uv = UV4_array[loop.vert.index]
-                            if (len(UV5_array) > 0):
-                                loop[uv_layer_5].uv = UV5_array[loop.vert.index]
+                            for u in range(UVCount):
+                                loop[uvLayers[u]].uv = UV_array[u][loop.vert.index]
 
                 for poly in mesh.polygons:
                     poly.use_smooth = True
@@ -995,6 +912,12 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
     remove_doubles = bpy.props.BoolProperty(
             name="Remove Doubles",
             description="Remove duplicate vertices",
+            default=False,
+            )
+
+    allow_black = bpy.props.BoolProperty(
+            name="Black Vertex Colors",
+            description="Allow black vertex coloring",
             default=False,
             )
 

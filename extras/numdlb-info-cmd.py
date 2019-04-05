@@ -446,9 +446,9 @@ def importMeshes(MSHName):
             for p in range(PolyGrpCount):
                 Vert_array = []
                 Normal_array = []
-                Color_array = []; Color2_array = []; Color3_array = []; Color4_array = []; Color5_array = []
-                Alpha_array = []; Alpha2_array = []; Alpha3_array = []; Alpha4_array = []; Alpha5_array = []
-                UV_array = []; UV2_array = []; UV3_array = []; UV4_array = []; UV5_array = []
+                Color_array = {}
+                Alpha_array = {}
+                UV_array = {}
                 Face_array = []
                 Weight_array = []
                 SingleBindID = 0
@@ -480,9 +480,13 @@ def importMeshes(MSHName):
                     elif (BuffName == "Tangent0"):
                         TanFmt = BuffParamFmt
                     elif (BuffName == "map1" or BuffName == "uvSet" or BuffName == "uvSet1" or BuffName == "uvSet2" or BuffName == "bake1"):
+                        UV_array[UVCount] = []
                         UVCount += 1
                     elif (BuffName == "colorSet1" or BuffName == "colorSet2" or BuffName == "colorSet2_1" or BuffName == "colorSet2_2" or BuffName == "colorSet2_3" or BuffName == "colorSet3" or BuffName == "colorSet4" or BuffName == "colorSet5" or BuffName == "colorSet6" or BuffName == "colorSet7"):
+                        Color_array[ColorCount] = []
+                        Alpha_array[ColorCount] = []
                         ColorCount += 1
+
                     else:
                         raise RuntimeError("Unknown format!")
                     f.seek(BuffParamRet, 0)
@@ -527,72 +531,33 @@ def importMeshes(MSHName):
                     print(PolyGrp_array[p].visGroupName + " UV start: " + str(f.tell()))
                 for v in range(PolyGrp_array[p].verticeCount):
                     if (UVCount >= 1):
-                        tu = decompressHalfFloat(f.read(2))
-                        tv = (decompressHalfFloat(f.read(2)) * -1) + 1
-                        UV_array.append([tu,tv])
-                        if (UVCount >= 2):
-                            tu2 = decompressHalfFloat(f.read(2))
-                            tv2 = (decompressHalfFloat(f.read(2)) * -1) + 1
-                            UV2_array.append([tu2,tv2])
-                            if (UVCount >= 3):
-                                tu3 = decompressHalfFloat(f.read(2))
-                                tv3 = (decompressHalfFloat(f.read(2)) * -1) + 1
-                                UV3_array.append([tu3,tv3])
-                                if (UVCount >= 4):
-                                    tu4 = decompressHalfFloat(f.read(2))
-                                    tv4 = (decompressHalfFloat(f.read(2)) * -1) + 1
-                                    UV4_array.append([tu4,tv4])
-                                    if (UVCount >= 5):
-                                        tu5 = decompressHalfFloat(f.read(2))
-                                        tv5 = (decompressHalfFloat(f.read(2)) * -1) + 1
-                                        UV5_array.append([tu5,tv5])
-                                    if (UVCount >= 6):
-                                        print("Importing more than 5 UV sets is not supported, not reading any more.")
-                    else:
-                        UV_array.append([0,0])
+                        for uv in range(UVCount):
+                            tu = decompressHalfFloat(f.read(2))
+                            tv = (decompressHalfFloat(f.read(2)) * -1) + 1
+                            UV_array[uv].append([tu, tv])
 
                     # Read vertex color data
                     if (ColorCount >= 1):
-                        colorr = float(struct.unpack('<B', f.read(1))[0]) / 128
-                        colorg = float(struct.unpack('<B', f.read(1))[0]) / 128
-                        colorb = float(struct.unpack('<B', f.read(1))[0]) / 128
-                        colora = float(struct.unpack('<B', f.read(1))[0]) / 128
-                        Color_array.append([colorr,colorg,colorb]); Alpha_array.append(colora)
-                        if (ColorCount >= 2):
-                            colorr2 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                            colorg2 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                            colorb2 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                            colora2 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                            Color2_array.append([colorr2,colorg2,colorb2]); Alpha2_array.append(colora2)
-                            if (ColorCount >= 3):
-                                colorr3 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                colorg3 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                colorb3 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                colora3 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                Color3_array.append([colorr3,colorg3,colorb3]); Alpha3_array.append(colora3)
-                                if (ColorCount >= 4):
-                                    colorr4 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                    colorg4 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                    colorb4 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                    colora4 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                    Color4_array.append([colorr4,colorg4,colorb4]); Alpha4_array.append(colora4)
-                                    if (ColorCount >= 5):
-                                        colorr5 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                        colorg5 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                        colorb5 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                        colora5 = float(struct.unpack('<B', f.read(1))[0]) / 128
-                                        Color5_array.append([colorr5,colorg5,colorb5]); Alpha5_array.append(colora5)
-                                        if (ColorCount >= 6):
-                                            print("Importing more than 5 vertex color sets is not supported, not reading any more.")
-                    else:
-                        Color_array.append([1.0,1.0,1.0])
-                        Alpha_array.append(1.0)
+                        for color in range(ColorCount):
+                            colorr = float(struct.unpack('<B', f.read(1))[0]) / 128
+                            colorg = float(struct.unpack('<B', f.read(1))[0]) / 128
+                            colorb = float(struct.unpack('<B', f.read(1))[0]) / 128
+                            colora = float(struct.unpack('<B', f.read(1))[0]) / 128
+                            Color_array[color].append([colorr,colorg,colorb])
+                            Alpha_array[color].append(colora)
 
                 if print_debug_info:
                     print(PolyGrp_array[p].visGroupName + " UV end: " + str(f.tell()))
-                print("UVmap 0: " + str(UV_array))
-                #print("Color: " + str(Color_array))
-                #print("Alpha: " + str(Alpha_array))
+                # Search for duplicate UV coordinates and make them unique so that Blender will not remove them
+                if (len(UV_array) > 0):
+                    for uvmap in UV_array.values():
+                        for uvcoorda in range(0, len(uvmap) - 1):
+                            count = uvcoorda
+                            for uvcoordb in range(count + 1, len(uvmap)):
+                                if (uvmap[uvcoordb] == uvmap[uvcoorda]):
+                                    uvmap[uvcoordb][0] += 0.000000000000001
+                                    uvmap[uvcoordb][1] += 0.000000000000001
+
                 # Read face data
                 f.seek(FaceBuffOffset + PolyGrp_array[p].facepointStart, 0)
                 if print_debug_info:
@@ -672,9 +637,8 @@ def importMeshes(MSHName):
                 #print(findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
                 #print(findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
 
-#modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/mario/c00/model.numdlb"
+modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/mario/c00/model.numdlb"
 #modelpath = "/opt/Smash Ultimate Models/fighter/packun/model/body/c00/model.numdlb"
-modelpath = "/media/richard/3AEE25744CE0956E/Smash Ultimate Models/assist/jiro/model/body/c00/model.numdlb"
 
 time_start = time.time()
 getModelInfo(modelpath)

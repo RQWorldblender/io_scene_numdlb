@@ -4,8 +4,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.2] - 2019-04-04
+## [1.3.0] - 2019-04-04
 * Stop overwriting object origins; this is needed so that everything will properly rotate around the X axis.
+* Improved method of storing vertex color and UV values, theoretically allowing for more than five of color maps or UV maps to be read.
+* Duplicate UV coordinates are made unique; this allows for things like some assist fighters' eyes to be properly textured.
+* Add new UI option to allow importing black vertex colors; they are not imported by default as they can cause meshes to become too difficult to see.
 
 ## [1.2.1] - 2019-04-04
 * Fix image-loading method so that it does not error out on Windows systems

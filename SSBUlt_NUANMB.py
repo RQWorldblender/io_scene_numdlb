@@ -9,7 +9,7 @@ Tooltip: 'Import *.NUANMB (.nuanmb)'
 
 __author__ = ["Richard Qian (Worldblender)", "Ploaj"]
 __url__ = ["https://gitlab.com/Worldblender/io_scene_numdlb"]
-__version__ = "1.2.2"
+__version__ = "1.3.0"
 __bpydoc__ = """\
 """
 
@@ -17,7 +17,7 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Animation Importer",
     "description": "Imports animation data from NUANMB files (binary animation format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Ploaj",
-    "version": (1, 2, 2),
+    "version": (1, 3, 0),
     "blender": (2, 77, 0),
     "api": 31236,
     "location": "File > Import",
@@ -500,13 +500,6 @@ def importAnimations(context, read_transform, read_material, read_visibility, re
                             tbone.matrix = tbone.parent.matrix * tfmArray[tbone.name]
                         else:
                             tbone.matrix = tfmArray[tbone.name]
-                    """
-                    List of fcurve types:
-                    * 'location'
-                    * 'rotation_euler'
-                    * 'rotation_quaternion'
-                    * 'scale'
-                    """
 
                     # First, add the position keyframes
                     try:
