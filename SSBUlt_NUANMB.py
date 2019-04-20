@@ -17,11 +17,11 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Animation Importer",
     "description": "Imports animation data from NUANMB files (binary animation format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Ploaj",
-    "version": (1, 3, 0),
+    "version": (1, 3, 1),
     "blender": (2, 77, 0),
     "api": 31236,
     "location": "File > Import",
-    "warning": 'Applying animations to non-matching armatures will likely cause meshes to deform incorrectly ', # used for warning icon and text in addons panel
+    "warning": "Applying animations to models that don't have bones aligned will cause them to badly deform", # used for warning icon and text in addons panel
     "wiki_url": "https://gitlab.com/Worldblender/io_scene_numdlb",
     "tracker_url": "https://gitlab.com/Worldblender/io_scene_numdlb/issues",
     "category": "Import-Export"}
@@ -133,6 +133,17 @@ def lerp(av, bv, v0, v1, factor):
 
     mu = (factor - v0) / (v1 - v0)
     return (av * (1 - mu)) + (bv * mu)
+
+def getExactObjectName(objName, compare):
+    # A list of strings to split object names with so that they can exactly match a given track name
+    extendNames = ["_VIS_O_OBJ", "_NSC_O_OBJ", "_O_OBJ", "_MeshShape"]
+
+    for term in extendNames:
+        result = objName.split(term)[0]
+        if (result == compare):
+            return result
+
+    return objName
 
 def getAnimationInfo(self, context, filepath, read_transform, read_material, read_visibility, read_camera):
     # Semi-global variables used by this function's hierarchy; cleared every time this function runs
@@ -481,7 +492,7 @@ def importAnimations(context, read_transform, read_material, read_visibility, re
             for frame in range(int(FrameCount) + 1):
                 # Structure of this dict is: {bone name, transformation matrix}; is cleared on every frame
                 tfmArray = {}
-                print("Track frame # " + str(frame))
+                print("Track frame # " + str(frame) + ", type " + AnimType.Transform.name)
                 for track in ag[1]:
                     if (frame < track.frameCount):
                         # Set up a matrix that can set position, rotation, and scale all at once
@@ -531,17 +542,20 @@ def importAnimations(context, read_transform, read_material, read_visibility, re
         elif (read_visibility and ag[0] == AnimType.Visibility.value):
             for track in ag[1]:
                 for vframe, trackData in enumerate(track.animations):
+                    print("Track frame # " + str(vframe + 1) + ", type " + AnimType.Visibility.name + " for " + track.name)
+                    print("Value: " + str(trackData))
+
                     # All meshes are visible by default, so search the object list and hide objects whose visibility is False
                     for mesh in bpy.data.objects:
-                        if (mesh.type == 'MESH' and (track.name in mesh.name)):
+                        if (mesh.type == 'MESH' and track.name == getExactObjectName(mesh.name, track.name)):
                             try:
                                 mesh.animation_data.action
                             except:
                                 mesh.animation_data_create()
 
-                            visBool = bpy.data.actions.new(track.name + '-' + AnimName)
-                            mesh.animation_data.action = visBool
-                            mesh.animation_data.action.use_fake_user = True
+                                visBool = bpy.data.actions.new(track.name + '-' + AnimName)
+                                mesh.animation_data.action = visBool
+                                mesh.animation_data.action.use_fake_user = True
 
                             mesh.hide = not trackData
                             mesh.hide_render = not trackData

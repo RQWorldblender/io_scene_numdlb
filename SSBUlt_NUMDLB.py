@@ -17,7 +17,7 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Model Importer",
     "description": "Imports data referenced by NUMDLB files (binary model format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Random Talking Bush, Ploaj",
-    "version": (1, 3, 0),
+    "version": (1, 3, 1),
     "blender": (2, 77, 0),
     "api": 31236,
     "location": "File > Import",
