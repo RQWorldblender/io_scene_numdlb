@@ -140,7 +140,7 @@ def readVarLenString(file):
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
-def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles, allow_black, create_rest_action, auto_rotate):
+def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_colors, use_uv_maps, allow_black, create_rest_action, auto_rotate):
     # Semi-global variables used by this function's hierarchy; cleared every time this function runs
     global dirPath; dirPath = ""
     global MODLName; MODLName = ""
@@ -203,7 +203,7 @@ def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_
         if os.path.isfile(SKTName):
             importSkeleton(context, SKTName, create_rest_action)
         if os.path.isfile(MSHName):
-            importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles, allow_black)
+            importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, allow_black)
 
         # Rotate armature if option is enabled
         if auto_rotate:
@@ -481,7 +481,7 @@ def importSkeleton(context, SKTName, create_rest_action):
             bpy.ops.object.mode_set(mode='OBJECT', toggle=False)
 
 # Imports the meshes
-def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, remove_doubles, allow_black):
+def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, allow_black):
     PolyGrp_array = []
     WeightGrp_array = []
 
@@ -798,10 +798,9 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
 
                 weight_layer = bm.verts.layers.deform.new()
 
-                for vert in range(len(Vert_array)):
-                    vertIndex = Vert_array.index(Vert_array[vert])
-                    bmv = bm.verts.new(Vert_array[vert])
-                    bmv.normal = Normal_array[vert]
+                for vertIndex, vert in enumerate(Vert_array):
+                    bmv = bm.verts.new(vert)
+                    bmv.normal = Normal_array[vertIndex]
 
                     for j in range(len(Weight_array[vertIndex].boneIDs)):
                         bmv[weight_layer][Weight_array[vertIndex].boneIDs[j]] =  Weight_array[vertIndex].weights[j]
@@ -851,9 +850,6 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
 
                 for poly in mesh.polygons:
                     poly.use_smooth = True
-
-                if remove_doubles:
-                    bmesh.ops.remove_doubles(bm, verts = bm.verts)
 
                 bm.to_mesh(mesh)
                 bm.free()
@@ -907,12 +903,6 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
             name="UV Maps",
             description="Import UV map information to meshes",
             default=True,
-            )
-
-    remove_doubles = bpy.props.BoolProperty(
-            name="Remove Doubles",
-            description="Remove duplicate vertices",
-            default=False,
             )
 
     allow_black = bpy.props.BoolProperty(
