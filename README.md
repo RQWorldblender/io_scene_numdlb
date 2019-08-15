@@ -28,7 +28,7 @@ This set of two scripts requires Blender 2.77 or later, but only 2.79 has been t
 
 1. Clone or download this repository. If downloaded, extract the files after that.
 
-2. Open Blender and select `File -> User Preferences -> Install from File` and select the newly downloaded scripts.
+2. Open Blender and select `File -> User Preferences -> Install from File` and select the newly downloaded scripts. If you are on blender 2.8 or above, make sure to install the scripts with the _2_80. Otherwise, just install the normal versions.
 
 3. In the search bar in the upper left, search for `Super Smash Bros. Ultimate`. If no results are found, try enabling the `Testing` supported level below the search bar.
 
