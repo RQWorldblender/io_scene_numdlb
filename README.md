@@ -1,7 +1,7 @@
 # Super Smash Bros. Ultimate model and animation importers for Blender (io_scene_numdlb)
 Imports data referenced by NUMDLB files and NUANMB files (binary model and animation formats used by some games developed by Bandai-Namco). May work for other games using the same format. Unlike the original MAXScript, this set of scripts is cross-platform, as they will work on any operating system that Blender and Python exist for. The readability in the rewritten model importer script is also improved, with the main function split into several smaller ones.
 
-**Both the model importer script and the animation importer script are now ready for daily use. There are a few limitations in both scripts:**
+**Both the model importer script and the animation importer script are now ready for daily use. Check out the branch `2.79_compatible` for a version of this addon compatible with <= Blender 2.79. The `master` branch will focus on >= Blender 2.80 and later, with Blender 2.83 LTS guaranteed to be compatible. There are a few limitations in both scripts:**
 
 * Vertex colors are set, but the alpha channel is not used, as there is no way to set it within the Blender UI.
 
