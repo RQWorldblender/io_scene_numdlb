@@ -9,7 +9,7 @@ Tooltip: 'Import *.NUMDLB (.numdlb)'
 
 __author__ = ["Richard Qian (Worldblender)", "Random Talking Bush", "Ploaj"]
 __url__ = ["https://gitlab.com/Worldblender/io_scene_numdlb"]
-__version__ = "1.3.2"
+__version__ = "1.3.3"
 __bpydoc__ = """\
 """
 
@@ -17,8 +17,8 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Model Importer",
     "description": "Imports data referenced by NUMDLB files (binary model format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Random Talking Bush, Ploaj",
-    "version": (1, 3, 2),
-    "blender": (2, 77, 0),
+    "version": (1, 3, 3),
+    "blender": (2, 80, 0),
     "api": 31236,
     "location": "File > Import",
     "warning": '', # used for warning icon and text in addons panel
@@ -27,7 +27,7 @@ bl_info = {
     "category": "Import-Export"}
 
 import bmesh, bpy, math, mathutils, os, struct, sys, time
-from bpy_extras import image_utils
+from bpy_extras import image_utils, node_shader_utils
 
 def reinterpretCastIntToFloat(int_val):
     return struct.unpack('f', struct.pack('I', int_val))[0]
@@ -209,7 +209,7 @@ def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_
         if auto_rotate:
             bpy.ops.object.select_all(action='DESELECT')
             bpy.ops.object.select_pattern(pattern=armaName)
-            bpy.ops.transform.rotate(value=math.radians(90), axis=(1, 0, 0), constraint_axis=(True, False, False), constraint_orientation='GLOBAL', mirror=False, proportional='DISABLED', proportional_edit_falloff='SMOOTH', proportional_size=1)
+            bpy.ops.transform.rotate(value=math.radians(90), orient_axis='X', constraint_axis=(True, False, False), orient_type='GLOBAL', mirror=False, use_proportional_edit=False, proportional_edit_falloff='SMOOTH', proportional_size=1)
             bpy.ops.object.select_all(action='TOGGLE')
 
 # Imports the materials
@@ -286,38 +286,31 @@ def importMaterials(MATName, image_transparency, texture_ext):
                     mat = bpy.data.materials[Materials_array[m].materialName]
                 else:
                     mat = bpy.data.materials.new(Materials_array[m].materialName)
-                mat.specular_shader = 'PHONG'
                 mat.use_fake_user = True
                 # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
                 if (Materials_array[m].color1Name != ""):
-                    if (bpy.data.textures.find(Materials_array[m].color1Name) > 0):
-                        tex = bpy.data.textures[Materials_array[m].color1Name]
-                    else:
-                        tex = bpy.data.textures.new(Materials_array[m].color1Name, type='IMAGE')
-
                     img = image_utils.load_image(Materials_array[m].color1Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
-                    img.use_alpha = image_transparency
-                    tex.image = img
+                    img.alpha_mode = image_transparency
+                    ma_wrap = node_shader_utils.PrincipledBSDFWrapper(mat, is_readonly=False)
 
-                    if (tex.name not in mat.texture_slots):
-                        slot = mat.texture_slots.add()
-                        slot.texture = tex
-                        slot.texture_coords = 'UV'
+                    ma_wrap.base_color_texture.image = img
+                    ma_wrap.base_color_texture.texcoords = 'UV'
+
                 # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
-                if (Materials_array[m].color2Name != ""):
-                    if (bpy.data.textures.find(Materials_array[m].color2Name) > 0):
-                        altTex = bpy.data.textures[Materials_array[m].color2Name]
-                    else:
-                        altTex = bpy.data.textures.new(Materials_array[m].color2Name, type='IMAGE')
+                # if (Materials_array[m].color2Name != ""):
+                #     if (bpy.data.textures.find(Materials_array[m].color2Name) > 0):
+                #         altTex = bpy.data.textures[Materials_array[m].color2Name]
+                #     else:
+                #         altTex = bpy.data.textures.new(Materials_array[m].color2Name, type='IMAGE')
 
-                    altImg = image_utils.load_image(Materials_array[m].color2Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
-                    altImg.use_alpha = image_transparency
-                    altTex.image = altImg
+                #     altImg = image_utils.load_image(Materials_array[m].color2Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
+                #     altImg.alpha_mode = image_transparency
+                #     altTex.image = altImg
 
-                    if (altTex.name not in mat.texture_slots):
-                        altSlot = mat.texture_slots.add()
-                        altSlot.texture = altTex
-                        altSlot.texture_coords = 'UV'
+                #     if (altTex.name not in mat.texture_slots):
+                #         altSlot = mat.texture_slots.add()
+                #         altSlot.texture = altTex
+                #         altSlot.texture_coords = 'UV'
 
         print(Materials_array)
 
@@ -371,14 +364,14 @@ def importSkeleton(context, SKTName, create_rest_action):
             global armaName # Used in case another armature of the same name exists
             armaName = skel.data.name
             skel.rotation_mode = 'QUATERNION'
-            skel.data.draw_type = 'STICK'
-            skel.show_x_ray = True
+            skel.data.display_type = 'STICK'
+            skel.show_in_front = True
 
-            context.scene.objects.link(skel)
+            context.view_layer.active_layer_collection.collection.objects.link(skel)
             for i in bpy.context.selected_objects:
-                i.select = False
-            skel.select = True
-            context.scene.objects.active = skel
+                i.select_set(False)
+            skel.select_set(True)
+            context.view_layer.objects.active = skel
             bpy.ops.object.mode_set(mode='EDIT', toggle=False)
 
             for c in range(BoneCount):
@@ -611,7 +604,7 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                 try:
                     obj.parent = bpy.data.objects[armaName]
                     for bone in bpy.data.armatures[armaName].bones.values():
-                        obj.vertex_groups.new(bone.name)
+                        obj.vertex_groups.new(name=bone.name)
                     modifier = obj.modifiers.new(armaName, type="ARMATURE")
                     modifier.object = bpy.data.objects[armaName]
                 except:
@@ -819,10 +812,10 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
 
                 if (use_uv_maps and UVCount > 0):
                     uvLayers = []
-                    texLayers = []
+                    # texLayers = []
                     for u in range(len(UV_array)):
                         uvLayers.append(bm.loops.layers.uv.new())
-                        texLayers.append(bm.faces.layers.tex.new())
+                        # texLayers.append(bm.faces.layers.tex.new())
 
                 for face in range(len(Face_array)):
                     p0 = Face_array[face][0] - 1
@@ -836,13 +829,13 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
 
                 for surface in bm.faces:
                     for loop in surface.loops:
-                        if (use_vertex_colors and ColorCount > 0):
-                            for c in range(ColorCount):
-                                if (Color_array[c][loop.vert.index] == [0.0, 0.0, 0.0] and not allow_black):
-                                    loop[colorLayers[c]] = [1.0, 1.0, 1.0]
-                                else:
-                                    loop[colorLayers[c]] = Color_array[c][loop.vert.index]
-                                loop[alphaLayers[c]] = Alpha_array[c][loop.vert.index]
+                        # if (use_vertex_colors and ColorCount > 0):
+                        #     for c in range(ColorCount):
+                        #         if (Color_array[c][loop.vert.index] == [0.0, 0.0, 0.0] and not allow_black):
+                        #             loop[colorLayers[c]] = [1.0, 1.0, 1.0]
+                        #         else:
+                        #             loop[colorLayers[c]] = Color_array[c][loop.vert.index]
+                        #         loop[alphaLayers[c]] = Alpha_array[c][loop.vert.index]
 
                         if (use_uv_maps and UVCount > 0):
                             for u in range(UVCount):
@@ -853,11 +846,11 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
 
                 bm.to_mesh(mesh)
                 bm.free()
-                context.scene.objects.link(obj)
+                context.view_layer.active_layer_collection.collection.objects.link(obj)
 
                 # Try to assign images to UV maps here
                 if (use_uv_maps and UVCount > 0):
-                    for id, uv_layer in enumerate(mesh.uv_textures):
+                    for id, uv_layer in enumerate(mesh.uv_layers):
                         for poly in uv_layer.data:
                             try:
                                 poly.image = bpy.data.images[findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], id) + texture_ext]
@@ -872,8 +865,8 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                     obj.matrix_world = BoneTrsArray[singlebone]
 
                 bpy.ops.object.select_all(action='DESELECT')
-                obj.select = True
-                context.scene.objects.active = obj
+                obj.select_set(True)
+                context.view_layer.objects.active = obj
                 bpy.ops.object.shade_smooth()
                 obj.data.update()
 
@@ -885,45 +878,49 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
     bl_idname = ("screen.numdlb_import")
     bl_label = ("NUMDLB Import")
     filename_ext = ".numdlb"
-    filter_glob = bpy.props.StringProperty(default="*.numdlb", options={'HIDDEN'})
+    filter_glob: bpy.props.StringProperty(default="*.numdlb", options={'HIDDEN'})
 
-    image_transparency = bpy.props.BoolProperty(
-            name="Use Image Alpha",
+    image_transparency: bpy.props.EnumProperty(
+            name="Image Alpha Type",
             description="Read image alpha channel to make images transparent",
-            default=True,
+            items=(("STRAIGHT", "Straight", "Straight, Store RGB and alpha channels separately with alpha acting as a mask, also known as unassociated alpha. Commonly used by image editing applications and file formats like PNG."),
+                   ("PREMUL", "Premultiplied", "Premultiplied, Store RGB channels with alpha multiplied in, also known as associated alpha. The natural format for renders and used by file formats like OpenEXR."),
+                   ("CHANNEL_PACKED", "Channel Packed", "Channel Packed, Different images are packed in the RGB and alpha channels, and they should not affect each other. Channel packing is commonly used by game engines to save memory."),
+                   ("NONE", "None", "None, Ignore alpha channel from the file and make image fully opaque.")),
+            default="STRAIGHT",
             )
 
-    use_vertex_colors = bpy.props.BoolProperty(
+    use_vertex_colors: bpy.props.BoolProperty(
             name="Vertex Colors",
             description="Import vertex color information to meshes",
             default=True,
             )
 
-    use_uv_maps = bpy.props.BoolProperty(
+    use_uv_maps: bpy.props.BoolProperty(
             name="UV Maps",
             description="Import UV map information to meshes",
             default=True,
             )
 
-    allow_black = bpy.props.BoolProperty(
+    allow_black: bpy.props.BoolProperty(
             name="Black Vertex Colors",
             description="Allow black vertex coloring",
             default=False,
             )
 
-    create_rest_action = bpy.props.BoolProperty(
+    create_rest_action: bpy.props.BoolProperty(
             name="Backup Rest Pose",
             description="Create an action containing the rest pose",
             default=True,
             )
 
-    auto_rotate = bpy.props.BoolProperty(
+    auto_rotate: bpy.props.BoolProperty(
             name="Auto-Rotate Armature",
             description="Rotate the armature so that everything points up z-axis, instead of up y-axis",
             default=True,
             )
 
-    texture_ext = bpy.props.EnumProperty(
+    texture_ext: bpy.props.EnumProperty(
             name="Texture File Extension",
             description="The file type to be associated with the texture names",
             items=((".bmp", "BMP", "Windows Bitmap"),
@@ -947,7 +944,7 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
         keywords = self.as_keywords(ignore=("filter_glob",))
         time_start = time.time()
         getModelInfo(context, **keywords)
-        context.scene.update()
+        context.view_layer.update()
 
         print("Done! Model import completed in " + str(round(time.time() - time_start, 4)) + " seconds.")
         return {"FINISHED"}
@@ -957,11 +954,11 @@ def menu_func_import(self, context):
     self.layout.operator(NUMDLB_Import_Operator.bl_idname, text="NUMDLB (.numdlb)")
 
 def register():
-    bpy.types.INFO_MT_file_import.append(menu_func_import)
-    bpy.utils.register_module(__name__)
+    bpy.utils.register_class(NUMDLB_Import_Operator)
+    bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
 
 def unregister():
-    bpy.types.INFO_MT_file_import.remove(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
 
 if __name__ == "__main__":
     register

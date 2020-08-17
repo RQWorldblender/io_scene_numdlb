@@ -9,7 +9,7 @@ Tooltip: 'Import *.NUANMB (.nuanmb)'
 
 __author__ = ["Richard Qian (Worldblender)", "Ploaj"]
 __url__ = ["https://gitlab.com/Worldblender/io_scene_numdlb"]
-__version__ = "1.3.2"
+__version__ = "1.3.3"
 __bpydoc__ = """\
 """
 
@@ -17,7 +17,7 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Animation Importer",
     "description": "Imports animation data from NUANMB files (binary animation format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Ploaj",
-    "version": (1, 3, 2),
+    "version": (1, 3, 3),
     "blender": (2, 80, 0),
     "api": 31236,
     "location": "File > Import",
@@ -557,7 +557,7 @@ def importAnimations(context, read_transform, read_material, read_visibility, re
                                 mesh.animation_data.action = visBool
                                 mesh.animation_data.action.use_fake_user = True
 
-                            mesh.hide_viewport = not trackData
+                            mesh.hide_set(not trackData)
                             mesh.hide_render = not trackData
                             mesh.keyframe_insert(data_path="hide_viewport", frame=vframe + 1, group=AnimName)
                             mesh.keyframe_insert(data_path="hide_render", frame=vframe + 1, group=AnimName)
@@ -611,8 +611,7 @@ class NUANMB_Import_Operator(bpy.types.Operator, ImportHelper):
         keywords = self.as_keywords(ignore=("filter_glob", "files",))
         time_start = time.time()
         getAnimationInfo(self, context, **keywords)
-        dg = bpy.context.evaluated_depsgraph_get()
-        dg.update()
+        context.view_layer.update()
 
         print("Done! All animations imported in " + str(round(time.time() - time_start, 4)) + " seconds.")
         return {"FINISHED"}
