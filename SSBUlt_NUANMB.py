@@ -18,7 +18,7 @@ bl_info = {
     "description": "Imports animation data from NUANMB files (binary animation format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Ploaj",
     "version": (1, 3, 2),
-    "blender": (2, 77, 0),
+    "blender": (2, 80, 0),
     "api": 31236,
     "location": "File > Import",
     "warning": "Applying animations to models that don't have bones aligned will cause them to badly deform", # used for warning icon and text in addons panel
@@ -500,7 +500,7 @@ def importAnimations(context, read_transform, read_material, read_visibility, re
                         pm = mathutils.Matrix.Translation(track.animations[frame][0][:3]) # Position matrix
                         rm = mathutils.Matrix.Rotation(qr.angle, 4, qr.axis) # Rotation matrix
                         sm = mathutils.Matrix.Scale(1, 4, track.animations[frame][2][:3]) # Scale matrix
-                        transform = mathutils.Matrix(pm * rm * sm)
+                        transform = mathutils.Matrix(pm @ rm @ sm)
                         tfmArray[track.name] = transform
 
                 # Iterate through the bone order in selected armature, and transform each of them
@@ -508,7 +508,7 @@ def importAnimations(context, read_transform, read_material, read_visibility, re
                     if (tbone.name in tfmArray):
                         # print(tbone.name + " | Animation matrix: " + str(tfmArray[tbone.name].transposed()))
                         if (tbone.parent):
-                            tbone.matrix = tbone.parent.matrix * tfmArray[tbone.name]
+                            tbone.matrix = tbone.parent.matrix @ tfmArray[tbone.name]
                         else:
                             tbone.matrix = tfmArray[tbone.name]
 
@@ -557,9 +557,9 @@ def importAnimations(context, read_transform, read_material, read_visibility, re
                                 mesh.animation_data.action = visBool
                                 mesh.animation_data.action.use_fake_user = True
 
-                            mesh.hide = not trackData
+                            mesh.hide_viewport = not trackData
                             mesh.hide_render = not trackData
-                            mesh.keyframe_insert(data_path="hide", frame=vframe + 1, group=AnimName)
+                            mesh.keyframe_insert(data_path="hide_viewport", frame=vframe + 1, group=AnimName)
                             mesh.keyframe_insert(data_path="hide_render", frame=vframe + 1, group=AnimName)
 
         elif (read_material and ag[0] == AnimType.Material.value):
@@ -580,28 +580,28 @@ class NUANMB_Import_Operator(bpy.types.Operator, ImportHelper):
     bl_idname = ("screen.nuanmb_import")
     bl_label = ("NUANMB Import")
     filename_ext = ".nuanmb"
-    filter_glob = bpy.props.StringProperty(default="*.nuanmb", options={'HIDDEN'})
-    files = bpy.props.CollectionProperty(type=bpy.types.OperatorFileListElement)
+    filter_glob: bpy.props.StringProperty(default="*.nuanmb", options={'HIDDEN'})
+    files: bpy.props.CollectionProperty(type=bpy.types.OperatorFileListElement)
 
-    read_transform = bpy.props.BoolProperty(
+    read_transform: bpy.props.BoolProperty(
             name="Transformation Tracks",
             description="Read transformation data",
             default=True,
             )
 
-    read_material = bpy.props.BoolProperty(
+    read_material: bpy.props.BoolProperty(
             name="Material Tracks",
             description="Read material data",
             default=True,
             )
 
-    read_visibility = bpy.props.BoolProperty(
+    read_visibility: bpy.props.BoolProperty(
             name="Visibility Tracks",
             description="Read visibility data",
             default=True,
             )
 
-    read_camera = bpy.props.BoolProperty(
+    read_camera: bpy.props.BoolProperty(
             name="Camera Tracks",
             description="Read camera data",
             default=True,
@@ -611,7 +611,8 @@ class NUANMB_Import_Operator(bpy.types.Operator, ImportHelper):
         keywords = self.as_keywords(ignore=("filter_glob", "files",))
         time_start = time.time()
         getAnimationInfo(self, context, **keywords)
-        context.scene.update()
+        dg = bpy.context.evaluated_depsgraph_get()
+        dg.update()
 
         print("Done! All animations imported in " + str(round(time.time() - time_start, 4)) + " seconds.")
         return {"FINISHED"}
@@ -628,11 +629,11 @@ def menu_func_import(self, context):
     self.layout.operator(NUANMB_Import_Operator.bl_idname, text="NUANMB (.nuanmb)")
 
 def register():
-    bpy.types.INFO_MT_file_import.append(menu_func_import)
-    bpy.utils.register_module(__name__)
+    bpy.utils.register_class(NUANMB_Import_Operator)
+    bpy.types.TOPBAR_MT_file_import.append(menu_func_import)
 
 def unregister():
-    bpy.types.INFO_MT_file_import.remove(menu_func_import)
+    bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
 
 if __name__ == "__main__":
     register
