@@ -579,6 +579,8 @@ class NUANMB_Import_Operator(bpy.types.Operator, ImportHelper):
     """Imports animation data from NUANMB files"""
     bl_idname = ("screen.nuanmb_import")
     bl_label = ("NUANMB Import")
+    bl_options = {'UNDO'}
+
     filename_ext = ".nuanmb"
     filter_glob: bpy.props.StringProperty(default="*.nuanmb", options={'HIDDEN'})
     files: bpy.props.CollectionProperty(type=bpy.types.OperatorFileListElement)

@@ -287,6 +287,7 @@ def importMaterials(MATName, image_transparency, texture_ext):
                 else:
                     mat = bpy.data.materials.new(Materials_array[m].materialName)
                 mat.use_fake_user = True
+                mat.use_backface_culling  = True
                 # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
                 if (Materials_array[m].color1Name != ""):
                     img = image_utils.load_image(Materials_array[m].color1Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
@@ -812,10 +813,8 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
 
                 if (use_uv_maps and UVCount > 0):
                     uvLayers = []
-                    # texLayers = []
                     for u in range(len(UV_array)):
                         uvLayers.append(bm.loops.layers.uv.new())
-                        # texLayers.append(bm.faces.layers.tex.new())
 
                 for face in range(len(Face_array)):
                     p0 = Face_array[face][0] - 1
@@ -829,34 +828,34 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
 
                 for surface in bm.faces:
                     for loop in surface.loops:
-                        # if (use_vertex_colors and ColorCount > 0):
-                        #     for c in range(ColorCount):
-                        #         if (Color_array[c][loop.vert.index] == [0.0, 0.0, 0.0] and not allow_black):
-                        #             loop[colorLayers[c]] = [1.0, 1.0, 1.0]
-                        #         else:
-                        #             loop[colorLayers[c]] = Color_array[c][loop.vert.index]
-                        #         loop[alphaLayers[c]] = Alpha_array[c][loop.vert.index]
+                        if (use_vertex_colors and ColorCount > 0):
+                            for c in range(ColorCount):
+                                if (Color_array[c][loop.vert.index] == [0.0, 0.0, 0.0] and not allow_black):
+                                    loop[colorLayers[c]] = [1.0, 1.0, 1.0, 1.0]
+                                else:
+                                    loop[colorLayers[c]] = Color_array[c][loop.vert.index] + [Alpha_array[c][loop.vert.index]]
+                               #loop[alphaLayers[c]] = Alpha_array[c][loop.vert.index]
 
                         if (use_uv_maps and UVCount > 0):
                             for u in range(UVCount):
                                 loop[uvLayers[u]].uv = UV_array[u][loop.vert.index]
 
-                for poly in mesh.polygons:
-                    poly.use_smooth = True
-
                 bm.to_mesh(mesh)
                 bm.free()
                 context.view_layer.active_layer_collection.collection.objects.link(obj)
 
-                # Try to assign images to UV maps here
-                if (use_uv_maps and UVCount > 0):
-                    for id, uv_layer in enumerate(mesh.uv_layers):
-                        for poly in uv_layer.data:
-                            try:
-                                poly.image = bpy.data.images[findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], id) + texture_ext]
-                            except:
-                                # Image does not exist
-                                continue
+                # Try to assign materials here, and enable smooth shading per mesh
+                for poly in mesh.polygons:
+                    poly.use_smooth = True
+
+                    try:
+                        material = bpy.data.materials[MODLGrp_array[PolyGrp_array[p].visGroupName]]
+                        if material not in mesh.materials:
+                            mesh.materials.append(material)
+                        poly.material_index = mesh.materials.find(material.name)
+                    except:
+                        # Image does not exist
+                        continue
 
                 # Apply matrix transformation to single-binding meshes
                 if (PolyGrp_array[p].singleBindName != ""):
@@ -877,6 +876,8 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
     """Loads a NUMDLB file and imports data referenced from it"""
     bl_idname = ("screen.numdlb_import")
     bl_label = ("NUMDLB Import")
+    bl_options = {'UNDO'}
+
     filename_ext = ".numdlb"
     filter_glob: bpy.props.StringProperty(default="*.numdlb", options={'HIDDEN'})
 
