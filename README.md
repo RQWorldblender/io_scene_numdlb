@@ -3,8 +3,6 @@ Imports data referenced by NUMDLB files and NUANMB files (binary model and anima
 
 **Both the model importer script and the animation importer script are now ready for daily use. Check out the branch `2.79_compatible` for a version of this addon compatible with <= Blender 2.79. The `master` branch will focus on >= Blender 2.80 and later, with Blender 2.83 LTS guaranteed to be compatible. There are a few limitations in both scripts:**
 
-* Vertex colors are set, but the alpha channel is not used, as there is no way to set it within the Blender UI.
-
 * Models must have their bone axises aligned, or animations will cause meshes to deform incorrectly. Models imported with the NUMDLB importer script and SMD (Valve Source Model) importer script take this into account.
 
 * Only transform and visibility tracks are supported by the NUANMB importer. Material and camera tracks are currently unsupported.
@@ -19,33 +17,31 @@ Imports data referenced by NUMDLB files and NUANMB files (binary model and anima
 
 * Direct folder (MEGA.nz): <https://mega.nz/#F!AAwWzCjT!Zd5kKpuQcE647DSRtpFShw>
 
-* Direct folder (Google Drive): <https://drive.google.com/open?id=1QucKyF_4IMFvZNZe4mMEiUXiAH5tpTIc>
-
 * PNG textures: <https://gitlab.com/Worldblender/smash-ultimate-textures>
 
 ## Installation
-This set of two scripts requires Blender 2.77 or later, but only 2.79 has been tested.
+This set of two scripts requires Blender 2.80 or later, but only 2.83 LTS has been tested.
 
 1. Clone or download this repository. If downloaded, extract the files after that.
 
-2. Open Blender and select `File -> User Preferences -> Install from File` and select the newly downloaded scripts. If you are on blender 2.8 or above, make sure to install the scripts with the _2_80. Otherwise, just install the normal versions.
+2. Open Blender and select `Edit -> Preferences -> Add-ons -> Install... ` and select the newly downloaded scripts. If you are on blender 2.8 or above, make sure to install the scripts with the _2_80. Otherwise, just install the normal versions.
 
 3. In the search bar in the upper left, search for `Super Smash Bros. Ultimate`. If no results are found, try enabling the `Testing` supported level below the search bar.
 
 4. Enable the plugin by clicking the checkbox next to the plugin name.
 
-5. Select `Save User Settings` in the lower left and close the window.
+5. Select the hamburger menu in the bottom-left corner and select `Save Preferences` at the lower left and close the window.
 
-6. Alternate install method: Navigate to the add-ons directory (location depends on OS and setup, see <https://docs.blender.org/manual/en/dev/getting_started/installing/configuration/directories.html> to find out where) at `./scripts/addons/`. If this directory hierarchy does not exist, create it. Copy both of the Python scripts to the add-ons directory. Proceed to step 2 and continue, or press the `F8` key to reload scripts if Blender is already open.
+6. Alternate install method: Navigate to the add-ons directory (location depends on OS and setup, see <https://docs.blender.org/manual/en/dev/getting_started/installing/configuration/directories.html> to find out where) at `./scripts/addons/`. If this directory hierarchy does not exist, create it. Copy both of the Python scripts to the add-ons directory. Proceed to step 2 and continue, or select `Blender logo -> System -> Reload Scripts`.
 
 ## Removal
-1. Open Blender and select `File -> User Preferences -> Add-ons`.
+1. Open Blender and select `Edit -> Preferences -> Add-ons`.
 
 2. In the search bar in the upper left, search for `Super Smash Bros. Ultimate`. If no results are found, try enabling the `Testing` supported level below the search bar.
 
 3. Disable the plugin by clicking the checkbox next to the plugin name - or uninstall the plugin by clicking `Remove`.
 
-4. Select `Save User Settings` in the lower left and close the window.
+4. Select the hamburger menu at the bottom-left corner and select `Save Preferences` in the lower left and close the window.
 
 5. Alternate removal method: Navigate to the add-ons directory (location depends on OS and setup, see <https://docs.blender.org/manual/en/dev/getting_started/installing/configuration/directories.html> to find out where) at `./scripts/addons/`. Delete both scripts beginning with 'SSBUlt'.
 
