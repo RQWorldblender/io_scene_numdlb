@@ -476,7 +476,6 @@ def importAnimations(context, read_transform, read_material, read_visibility, re
 
     action = bpy.data.actions.new(AnimName)
     obj.animation_data.action = action
-    obj.animation_data.action.use_fake_user = True
 
     # Animation frames start at 1, the same as what Blender uses by default
     context.scene.frame_start = 1
@@ -512,32 +511,32 @@ def importAnimations(context, read_transform, read_material, read_visibility, re
                         else:
                             tbone.matrix = tfmArray[tbone.name]
 
-                    # First, add the position keyframes
-                    try:
-                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
-                                   (tbone.name, "location"),
-                                   frame=frame + 1,
-                                   group=AnimName)
-                    except:
-                        continue
+                        # First, add the position keyframes
+                        try:
+                            obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
+                                       (tbone.name, "location"),
+                                       frame=frame + 1,
+                                       group=AnimName)
+                        except:
+                            continue
 
-                    # Next, add the rotation keyframes
-                    try:
-                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
-                                   (tbone.name, "rotation_quaternion"),
-                                   frame=frame + 1,
-                                   group=AnimName)
-                    except:
-                        continue
+                        # Next, add the rotation keyframes
+                        try:
+                            obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
+                                       (tbone.name, "rotation_quaternion"),
+                                       frame=frame + 1,
+                                       group=AnimName)
+                        except:
+                            continue
 
-                    # Last, add the scale keyframes
-                    try:
-                        obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
-                                   (tbone.name, "scale"),
-                                   frame=frame + 1,
-                                   group=AnimName)
-                    except:
-                        continue
+                        # Last, add the scale keyframes
+                        try:
+                            obj.keyframe_insert(data_path='pose.bones["%s"].%s' %
+                                       (tbone.name, "scale"),
+                                       frame=frame + 1,
+                                       group=AnimName)
+                        except:
+                            continue
 
         elif (read_visibility and ag[0] == AnimType.Visibility.value):
             for track in ag[1]:
@@ -546,21 +545,13 @@ def importAnimations(context, read_transform, read_material, read_visibility, re
                     print("Value: " + str(trackData))
 
                     # All meshes are visible by default, so search the object list and hide objects whose visibility is False
-                    for mesh in bpy.data.objects:
-                        if (mesh.type == 'MESH' and track.name == getExactObjectName(mesh.name, track.name)):
-                            try:
-                                mesh.animation_data.action
-                            except:
-                                mesh.animation_data_create()
+                    for target in bpy.data.objects:
+                        if (target.type == 'MESH' and track.name == getExactObjectName(target.name, track.name)):
+                            target.hide_render = not trackData
+                            target.hide_viewport = not trackData
+                            target.keyframe_insert(data_path="hide_viewport", frame=vframe + 1, group=AnimName)
+                            target.keyframe_insert(data_path="hide_render", frame=vframe + 1, group=AnimName)
 
-                                visBool = bpy.data.actions.new(track.name + '-' + AnimName)
-                                mesh.animation_data.action = visBool
-                                mesh.animation_data.action.use_fake_user = True
-
-                            mesh.hide_set(not trackData)
-                            mesh.hide_render = not trackData
-                            mesh.keyframe_insert(data_path="hide_viewport", frame=vframe + 1, group=AnimName)
-                            mesh.keyframe_insert(data_path="hide_render", frame=vframe + 1, group=AnimName)
 
         elif (read_material and ag[0] == AnimType.Material.value):
             print("Importing material animations not yet supported")
