@@ -280,6 +280,7 @@ def importMaterials(MATName, use_emissive_maps, use_prm_maps, use_normal_maps, t
                 mat.use_fake_user = True
                 mat.use_backface_culling  = True
                 mat.use_nodes = True
+                mat.blend_method = 'OPAQUE'
                 nodes = mat.node_tree.nodes
                 links = mat.node_tree.links
 
@@ -295,15 +296,17 @@ def importMaterials(MATName, use_emissive_maps, use_prm_maps, use_normal_maps, t
                     # May have transparency.
                     # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
                     tex_fname_1 = image_utils.load_image(Materials_array[m].color1Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
+                    tex_fname_1.alpha_mode = 'NONE'
 
                     tex1_node = nodes.new(type="ShaderNodeTexImage")
                     tex1_node.image = tex_fname_1
 
                     # 'alp_' should be rendered with alpha
                     # 'def_', 'skin_' should not be rendered with alpha
-                    if Materials_array[m].materialName.find("alp") >= 0 or Materials_array[m].materialName.find("head") or Materials_array[m].materialName.find("mouth") >= 0 \
-                    or Materials_array[m].color1Name.find("alp") >= 0 or Materials_array[m].color1Name.find("head") >= 0 or Materials_array[m].color1Name.find("mouth"):
+                    if ("alp" in Materials_array[m].materialName) or ("head" in Materials_array[m].materialName) or ("mouth" in Materials_array[m].materialName) or ("facial" in Materials_array[m].materialName) or ("AZA" in Materials_array[m].materialName) \
+                    or ("alp" in Materials_array[m].color1Name) or ("head" in Materials_array[m].color1Name) or ("mouth" in Materials_array[m].color1Name) or ("facial" in Materials_array[m].color1Name) or ("AZA" in Materials_array[m].color1Name):
                         mat.blend_method = 'HASHED'
+                        tex_fname_1.alpha_mode = 'STRAIGHT'
                         links.new(tex1_node.outputs["Alpha"], principled_node.inputs["Alpha"])
 
                     uvmap_node = nodes.new(type="ShaderNodeUVMap")
