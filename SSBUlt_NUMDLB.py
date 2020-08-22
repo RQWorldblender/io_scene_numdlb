@@ -124,15 +124,6 @@ class WeightGroupData:
     def __repr__(self):
         return str(self.groupName) + "\t| Subgroup #: " + str(self.subGroupNum) + "\t| Weight info max: " + str(self.weightInfMax) + "\t| Weight flags: " + str(self.weightFlag2) + ", " + str(self.weightFlag3) + ", " + str(self.weightFlag4) + "\t| Rig info offset: " + str(self.rigInfOffset) + "\t| Rig info count: " + str(self.rigInfCount) + "\n"
 
-def findUVImage(matNameQuery, UVMapID=0):
-    for mat in Materials_array:
-        if (mat.materialName == matNameQuery):
-            if (UVMapID > 0):
-                return mat.color2Name
-            else:
-                return mat.color1Name
-    return ""
-
 def readVarLenString(file):
     nameBuffer = []
     while('\x00' not in nameBuffer):
@@ -140,7 +131,7 @@ def readVarLenString(file):
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
-def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_colors, use_uv_maps, allow_black, create_rest_action, auto_rotate):
+def getModelInfo(context, filepath, texture_ext, use_vertex_colors, use_uv_maps, allow_black, use_emissive_maps, use_prm_maps, use_normal_maps, create_rest_action, auto_rotate):
     # Semi-global variables used by this function's hierarchy; cleared every time this function runs
     global dirPath; dirPath = ""
     global MODLName; MODLName = ""
@@ -199,7 +190,7 @@ def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_
                 raise RuntimeError("%s is not a valid NUMDLB file." % filepath)
 
         if os.path.isfile(MATName):
-            importMaterials(MATName, image_transparency, texture_ext)
+            importMaterials(MATName, use_emissive_maps, use_prm_maps, use_normal_maps, texture_ext)
         if os.path.isfile(SKTName):
             importSkeleton(context, SKTName, create_rest_action)
         if os.path.isfile(MSHName):
@@ -213,7 +204,7 @@ def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_
             bpy.ops.object.select_all(action='TOGGLE')
 
 # Imports the materials
-def importMaterials(MATName, image_transparency, texture_ext):
+def importMaterials(MATName, use_emissive_maps, use_prm_maps, use_normal_maps, texture_ext):
     with open(MATName, 'rb') as mt:
         mt.seek(0x10, 0)
         MATCheck = struct.unpack('<L', mt.read(4))[0]
@@ -288,30 +279,126 @@ def importMaterials(MATName, image_transparency, texture_ext):
                     mat = bpy.data.materials.new(Materials_array[m].materialName)
                 mat.use_fake_user = True
                 mat.use_backface_culling  = True
-                # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
+                mat.use_nodes = True
+                nodes = mat.node_tree.nodes
+                links = mat.node_tree.links
+
+                principled_node = nodes[0]
+                assert principled_node.type == 'BSDF_PRINCIPLED'
+                x, y = principled_node.location
+                # Make it less shiny
+                principled_node.inputs["Specular"].default_value = 0
+                principled_node.inputs["Roughness"].default_value = 1
+
                 if (Materials_array[m].color1Name != ""):
-                    img = image_utils.load_image(Materials_array[m].color1Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
-                    img.alpha_mode = image_transparency
-                    ma_wrap = node_shader_utils.PrincipledBSDFWrapper(mat, is_readonly=False)
+                    # tex_fname_1 is the diffuse texture.
+                    # May have transparency.
+                    # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
+                    tex_fname_1 = image_utils.load_image(Materials_array[m].color1Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
 
-                    ma_wrap.base_color_texture.image = img
-                    ma_wrap.base_color_texture.texcoords = 'UV'
+                    tex1_node = nodes.new(type="ShaderNodeTexImage")
+                    tex1_node.image = tex_fname_1
 
-                # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
-                # if (Materials_array[m].color2Name != ""):
-                #     if (bpy.data.textures.find(Materials_array[m].color2Name) > 0):
-                #         altTex = bpy.data.textures[Materials_array[m].color2Name]
-                #     else:
-                #         altTex = bpy.data.textures.new(Materials_array[m].color2Name, type='IMAGE')
+                    # 'alp_' should be rendered with alpha
+                    # 'def_', 'skin_' should not be rendered with alpha
+                    if Materials_array[m].materialName.find("alp") >= 0 or Materials_array[m].materialName.find("head") or Materials_array[m].materialName.find("mouth") >= 0 \
+                    or Materials_array[m].color1Name.find("alp") >= 0 or Materials_array[m].color1Name.find("head") >= 0 or Materials_array[m].color1Name.find("mouth"):
+                        mat.blend_method = 'HASHED'
+                        links.new(tex1_node.outputs["Alpha"], principled_node.inputs["Alpha"])
 
-                #     altImg = image_utils.load_image(Materials_array[m].color2Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
-                #     altImg.alpha_mode = image_transparency
-                #     altTex.image = altImg
+                    uvmap_node = nodes.new(type="ShaderNodeUVMap")
+                    uvmap_node.uv_map = "UVMap" # first UV map for first texture
+                    links.new(uvmap_node.outputs[0], tex1_node.inputs["Vector"])
 
-                #     if (altTex.name not in mat.texture_slots):
-                #         altSlot = mat.texture_slots.add()
-                #         altSlot.texture = altTex
-                #         altSlot.texture_coords = 'UV'
+                    # nor_fname_1 is the normal map.
+                    # R - Normal X+
+                    # G - Normal Y+
+                    # B - Blend Map (unused)
+                    # A - Cavity Map (unused)                 
+                    if (use_normal_maps and Materials_array[m].normalName != ""):
+                        nor_fname_1 = image_utils.load_image(Materials_array[m].normalName + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
+                        nor_fname_1.colorspace_settings.name = 'Non-Color'
+
+                        nor_tex_node = nodes.new(type="ShaderNodeTexImage")
+                        nor_tex_node.image = nor_fname_1
+                        links.new(uvmap_node.outputs[0], nor_tex_node.inputs["Vector"])
+                        
+                        nor_in_node = nodes.new(type="ShaderNodeSeparateRGB")
+                        links.new(nor_tex_node.outputs["Color"], nor_in_node.inputs["Image"])
+                        
+                        nor_out_node = nodes.new(type="ShaderNodeCombineRGB")
+                        links.new(nor_in_node.outputs["R"], nor_out_node.inputs["R"])
+                        links.new(nor_in_node.outputs["G"], nor_out_node.inputs["G"])
+                        
+                        nor_node = nodes.new(type="ShaderNodeNormalMap")
+                        links.new(nor_out_node.outputs["Image"], nor_node.inputs["Color"])
+                        
+                        links.new(nor_node.outputs["Normal"], principled_node.inputs["Normal"])
+
+                    # emi_fname_1 is the emissive map.
+                    # Support for one emissive map, not two, is currently implemented.
+                    if (use_emissive_maps and Materials_array[m].emissive1Name != ""):
+                        emi_fname_1 = image_utils.load_image(Materials_array[m].emissive1Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
+
+                        emi_node = nodes.new(type="ShaderNodeTexImage")
+                        emi_node.image = emi_fname_1
+                        links.new(uvmap_node.outputs[0], emi_node.inputs["Vector"])
+                        links.new(emi_node.outputs["Color"], principled_node.inputs["Emission"])
+
+                    # prm_fname_1 is the PRM map, (Physically-based Rendering Map), with these channels:
+                    # Red - mtl (Metallic)
+                    # Green - rgh (Roughness)
+                    # Blue - ao (Ambient Occlusion)
+                    # Alpha - spc (Specular)
+                    if (use_prm_maps and Materials_array[m].prmName != ""):
+                        prm_fname_1 = image_utils.load_image(Materials_array[m].prmName + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
+
+                        prm_tex_node = nodes.new(type="ShaderNodeTexImage")
+                        prm_tex_node.image = prm_fname_1
+                        links.new(uvmap_node.outputs[0], prm_tex_node.inputs["Vector"])
+
+                        prm_node = nodes.new(type="ShaderNodeSeparateRGB")
+                        links.new(prm_tex_node.outputs["Color"], prm_node.inputs["Image"])
+                        links.new(prm_node.outputs["R"], principled_node.inputs["Metallic"])
+                        links.new(prm_node.outputs["G"], principled_node.inputs["Roughness"])
+                        links.new(prm_tex_node.outputs["Alpha"], principled_node.inputs["Specular"])
+
+                        ao_node = nodes.new(type="ShaderNodeMixRGB")
+                        ao_node.blend_type = 'MULTIPLY'
+                        links.new(tex1_node.outputs["Color"], ao_node.inputs["Color1"])
+                        links.new(prm_node.outputs["B"], ao_node.inputs["Color2"])
+
+
+                    if (Materials_array[m].color2Name != ""):
+                        # tex_fname_2 is overlaid on top of tex_fname_1
+                        # No transparency for tex_fname_1.
+                        # Check and reuse existing same-name secondary texture slot, or create it if it doesn't already exist
+                        tex_fname_2 = image_utils.load_image(Materials_array[m].color2Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
+
+
+                        tex2_node = nodes.new(type="ShaderNodeTexImage")
+                        tex2_node.image = tex_fname_2
+
+                        uvmap_node = nodes.new(type="ShaderNodeUVMap")
+                        uvmap_node.uv_map = "UVMap.001" # second UV map for second texture
+                        links.new(uvmap_node.outputs[0], tex2_node.inputs["Vector"])
+
+                        mix_node = nodes.new(type="ShaderNodeMixRGB")
+
+                        if (use_prm_maps and Materials_array[m].prmName != ""):
+                            links.new(ao_node.outputs["Color"], mix_node.inputs[1])
+                        else:
+                            links.new(tex1_node.outputs["Color"], mix_node.inputs[1])
+
+                        links.new(tex2_node.outputs["Color"], mix_node.inputs[2])
+                        links.new(tex2_node.outputs["Alpha"], mix_node.inputs[0])
+
+                        links.new(mix_node.outputs[0], principled_node.inputs["Base Color"])
+                    else:
+                        if (use_prm_maps and Materials_array[m].prmName != ""):
+                            links.new(ao_node.outputs["Color"], principled_node.inputs["Base Color"])
+                        else:
+                            links.new(tex1_node.outputs["Color"], principled_node.inputs["Base Color"])
 
         print(Materials_array)
 
@@ -704,7 +791,7 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
 
                 print(PolyGrp_array[p].visGroupName + " UV end: " + str(f.tell()))
                 # Search for duplicate UV coordinates and make them unique so that Blender will not remove them
-                if (len(UV_array) > 0):
+                if (use_uv_maps and len(UV_array) > 0):
                     for uvmap in UV_array.values():
                         for uvcoorda in range(0, len(uvmap) - 1):
                             count = uvcoorda
@@ -834,7 +921,6 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                                     loop[colorLayers[c]] = [1.0, 1.0, 1.0, 1.0]
                                 else:
                                     loop[colorLayers[c]] = Color_array[c][loop.vert.index] + [Alpha_array[c][loop.vert.index]]
-                               #loop[alphaLayers[c]] = Alpha_array[c][loop.vert.index]
 
                         if (use_uv_maps and UVCount > 0):
                             for u in range(UVCount):
@@ -881,14 +967,22 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
     filename_ext = ".numdlb"
     filter_glob: bpy.props.StringProperty(default="*.numdlb", options={'HIDDEN'})
 
-    image_transparency: bpy.props.EnumProperty(
-            name="Image Alpha Type",
-            description="Read image alpha channel to make images transparent",
-            items=(("STRAIGHT", "Straight", "Straight, Store RGB and alpha channels separately with alpha acting as a mask, also known as unassociated alpha. Commonly used by image editing applications and file formats like PNG."),
-                   ("PREMUL", "Premultiplied", "Premultiplied, Store RGB channels with alpha multiplied in, also known as associated alpha. The natural format for renders and used by file formats like OpenEXR."),
-                   ("CHANNEL_PACKED", "Channel Packed", "Channel Packed, Different images are packed in the RGB and alpha channels, and they should not affect each other. Channel packing is commonly used by game engines to save memory."),
-                   ("NONE", "None", "None, Ignore alpha channel from the file and make image fully opaque.")),
-            default="STRAIGHT",
+    use_normal_maps: bpy.props.BoolProperty(
+            name="Use Normal Maps",
+            description="Give materials depth while reducing polygon count",
+            default=False,
+            )
+
+    use_prm_maps: bpy.props.BoolProperty(
+            name="Use PRM Maps",
+            description="Use advanced material information specified by PRM maps",
+            default=False,
+            )
+
+    use_emissive_maps: bpy.props.BoolProperty(
+            name="Use Emissive Maps",
+            description="Give certain materials a glowing effect",
+            default=False,
             )
 
     use_vertex_colors: bpy.props.BoolProperty(
@@ -912,7 +1006,7 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
     create_rest_action: bpy.props.BoolProperty(
             name="Backup Rest Pose",
             description="Create an action containing the rest pose",
-            default=True,
+            default=False,
             )
 
     auto_rotate: bpy.props.BoolProperty(
@@ -932,9 +1026,9 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
                    (".jpg", "JPG", "Joint Photographic Expert Group"),
                    (".jpeg", "JPEG", "Joint Photographic Expert Group"),
                    (".jp2", "JP2", "Joint Photographic Expert Group 2000"),
-                   (".j2k", "J2K", "Joint Photographic Expert Group 2000"),
                    (".png", "PNG", "Portable Network Graphics"),
                    (".rgb", "RGB", "Iris"),
+                   (".sgi", "TGA", "Targa"),
                    (".tga", "TGA", "Targa"),
                    (".tif", "TIF", "Tagged Image File Format"),
                    (".tiff", "TIFF", "Tagged Image File Format")),
@@ -960,6 +1054,7 @@ def register():
 
 def unregister():
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
+    bpy.utils.unregister_class(NUMDLB_Import_Operator)
 
 if __name__ == "__main__":
     register

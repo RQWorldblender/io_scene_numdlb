@@ -635,6 +635,7 @@ def register():
 
 def unregister():
     bpy.types.TOPBAR_MT_file_import.remove(menu_func_import)
+    bpy.utils.unregister_class(NUANMB_Import_Operator)
 
 if __name__ == "__main__":
     register
