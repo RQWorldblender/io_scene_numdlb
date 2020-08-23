@@ -1,51 +1,39 @@
 import bpy, os
 
 # Select Expressions
-bpy.ops.object.select_pattern(pattern="*Blink*")
-bpy.ops.object.select_pattern(pattern="*Attack*")
-bpy.ops.object.select_pattern(pattern="*Ouch*")
-bpy.ops.object.select_pattern(pattern="*Talk*")
-bpy.ops.object.select_pattern(pattern="*Capture*")
-bpy.ops.object.select_pattern(pattern="*Ottotto*")
-bpy.ops.object.select_pattern(pattern="*Escape*")
-bpy.ops.object.select_pattern(pattern="*Half*")
-bpy.ops.object.select_pattern(pattern="*Pattern*")
-bpy.ops.object.select_pattern(pattern="*Result*")
-bpy.ops.object.select_pattern(pattern="*Harf*")
-bpy.ops.object.select_pattern(pattern="*Hot*")
-bpy.ops.object.select_pattern(pattern="*Heavy*")
-bpy.ops.object.select_pattern(pattern="*Voice*")
-bpy.ops.object.select_pattern(pattern="*Fura*")
-bpy.ops.object.select_pattern(pattern="*Catch*")
-bpy.ops.object.select_pattern(pattern="*Cliff*")
-bpy.ops.object.select_pattern(pattern="*FLIP*")
-bpy.ops.object.select_pattern(pattern="*Bound*")
-bpy.ops.object.select_pattern(pattern="*Down*")
-bpy.ops.object.select_pattern(pattern="*Final*")
-bpy.ops.object.select_pattern(pattern="*Result*")
-bpy.ops.object.select_pattern(pattern="*StepPose*")
-bpy.ops.object.select_pattern(pattern="*Sorori*")
-bpy.ops.object.select_pattern(pattern="*Fall*")
-bpy.ops.object.select_pattern(pattern="*Appeal*")
-bpy.ops.object.select_pattern(pattern="*DamageFlyFront*")
-bpy.ops.object.select_pattern(pattern="*CameraHit*")
-# Move to another Layer
-bpy.ops.object.move_to_layer(layers=(False, True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False))
-bpy.context.scene.layers[1] = True
-bpy.ops.object.select_all(action='TOGGLE')
-bpy.ops.object.select_pattern(pattern="*Openblink*")
-bpy.ops.object.select_pattern(pattern="*FaceN*")
-bpy.ops.object.move_to_layer(layers=(True, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False, False))
-bpy.ops.object.select_all(action='TOGGLE')
-bpy.context.scene.layers[1] = False
+mesh_expr = ["*Blink*", "*Attack*", "*Ouch*", "*Talk*", "*Capture*", "*Ottotto*", "*Escape*", "*Half*", "*Pattern*", "*Result*", "*Harf*","*Hot*", "*Heavy*", "*Voice*", "*Fura*", "*Throw*", "*Catch*", "*Cliff*", "*FLIP*", "*Bound*", "*Down*", "*Bodybig*", "*Final*", "*Result*", "*StepPose*", "*Sorori*", "*Fall*", "*Appeal*", "*DamageFlyFront*", "*CameraHit*"]
 
-# Deselect all
-for obj in bpy.data.objects:
-    obj.select = False
+# Make collections for each expressions
+bpy.ops.object.select_all(action='DESELECT')
+for exp in mesh_expr:
+    bpy.ops.object.select_pattern(pattern=exp)
+    selectNum = 0
+    for obj in bpy.data.objects:
+        if obj.select_get():
+            selectNum += 1
+            print(exp + " -> " + obj.name)
 
-# Move Armature to separate layer
-bpy.ops.object.select_pattern(pattern="*Armature*")
-bpy.ops.object.move_to_layer(layers=(False, False, False, False, False, False, False, False, False, False, True, False, False, False, False, False, False, False, False, False))
+    co = bpy.data.collections
+    if selectNum > 0:
+        if exp in co:
+            collect = co[exp]
+        else:
+            collect = co.new(name=exp)
+            bpy.context.view_layer.active_layer_collection.collection.children.link(collect)
+        
+        for obj in bpy.data.objects:
+            if obj.select_get():
+                bpy.ops.collection.objects_remove_active()
+                collect.objects.link(obj)
+
+        collect.hide_viewport = True
+        collect.hide_render = True
+
+    bpy.ops.object.select_all(action='DESELECT')
+
+#bpy.ops.object.select_all(action='TOGGLE')
+#bpy.ops.object.select_pattern(pattern="*Openblink*")
+#bpy.ops.object.select_pattern(pattern="*FaceN*")
 
 # Change image filepaths to be relative to the Blender file
 for image in bpy.data.images:
