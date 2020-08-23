@@ -3,14 +3,13 @@ Imports data referenced by NUMDLB files and NUANMB files (binary model and anima
 
 **Both the model importer script and the animation importer script are now ready for daily use. Check out the branch `2.79_compatible` for a version of this addon compatible with <= Blender 2.79. The `master` branch will focus on >= Blender 2.80 and later, with Blender 2.83 LTS guaranteed to be compatible. There are a few limitations in both scripts:**
 
+* Node setups in the Shader Node Editor or the Texture Node Editor can be somewhat messy after import. While their locations can be set during import, I prefer to not hard-code the locations of every node. Hence every node will appear around the origin (0, 0), but they can be manually moved elsewhere.
+
 * Models must have their bone axises aligned, or animations will cause meshes to deform incorrectly. Models imported with the NUMDLB importer script and SMD (Valve Source Model) importer script take this into account.
 
 * Only transform and visibility tracks are supported by the NUANMB importer. Material and camera tracks are currently unsupported.
 
-* The following kinds of textures are read, but currently not imported (the Cycles and EEVEE (2.80 and later) rendering engines may support them however):
-    * Normal maps
-    * PRM maps (Used with Principled BSDF shaders)
-    * Emissive maps
+* Normal maps, PRM maps (Used with Principled BSDF shaders), and Emissive maps are now supported, but they are disabled by default due to the default render settings causing models to look drastically different. 
 
 ## Where to obtain assets
 * Project thread: <https://www.vg-resource.com/thread-34836.html>

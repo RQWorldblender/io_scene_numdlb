@@ -4,6 +4,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2020-08-22
+* First numbered version for Blender 2.80 and later. Older Blender versions are no longer supported. Material setup is now done with nodes.
+* Support for texturing two UV maps with materials. Especially allows to render most characters' eyes OOTB.
+* Normal maps, PRM maps (Used with Principled BSDF shaders), and Emissive maps are now supported, but disabled by default.
+* In relationship to the above, added options for toggling each of the three kinds of extra textures.
+* Image alpha determined by specific keywords (most commonly "alp") in material names and/or texture names, instead of being set unilaterally for every texture. The option to unilaterally set image alpha has been subsequently removed.
+* Alpha channel of vertex colors supported.
+* Added undo history support.
+* No longer create rest poses, as they are already embedded per armature during import.
+
 ## [1.3.3] - 2019-08-14
 * Adding experimental support for blender 2.80
 
