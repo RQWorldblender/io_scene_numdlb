@@ -9,7 +9,7 @@ Tooltip: 'Import *.NUMDLB (.numdlb)'
 
 __author__ = ["Richard Qian (Worldblender)", "Random Talking Bush", "Ploaj"]
 __url__ = ["https://gitlab.com/Worldblender/io_scene_numdlb"]
-__version__ = "1.3.2"
+__version__ = "1.4.0"
 __bpydoc__ = """\
 """
 
@@ -17,7 +17,7 @@ bl_info = {
     "name": "Super Smash Bros. Ultimate Model Importer",
     "description": "Imports data referenced by NUMDLB files (binary model format used by some games developed by Bandai-Namco)",
     "author": "Richard Qian (Worldblender), Random Talking Bush, Ploaj",
-    "version": (1, 3, 2),
+    "version": (1, 4, 0),
     "blender": (2, 77, 0),
     "api": 31236,
     "location": "File > Import",
@@ -140,7 +140,7 @@ def readVarLenString(file):
     del nameBuffer[-1]
     return ''.join(nameBuffer)
 
-def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_colors, use_uv_maps, allow_black, create_rest_action, auto_rotate):
+def getModelInfo(context, filepath, texture_ext, use_vertex_colors, use_uv_maps, allow_black, create_rest_action, auto_rotate):
     # Semi-global variables used by this function's hierarchy; cleared every time this function runs
     global dirPath; dirPath = ""
     global MODLName; MODLName = ""
@@ -199,7 +199,7 @@ def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_
                 raise RuntimeError("%s is not a valid NUMDLB file." % filepath)
 
         if os.path.isfile(MATName):
-            importMaterials(MATName, image_transparency, texture_ext)
+            importMaterials(MATName, texture_ext)
         if os.path.isfile(SKTName):
             importSkeleton(context, SKTName, create_rest_action)
         if os.path.isfile(MSHName):
@@ -213,7 +213,7 @@ def getModelInfo(context, filepath, image_transparency, texture_ext, use_vertex_
             bpy.ops.object.select_all(action='TOGGLE')
 
 # Imports the materials
-def importMaterials(MATName, image_transparency, texture_ext):
+def importMaterials(MATName, texture_ext):
     with open(MATName, 'rb') as mt:
         mt.seek(0x10, 0)
         MATCheck = struct.unpack('<L', mt.read(4))[0]
@@ -288,6 +288,16 @@ def importMaterials(MATName, image_transparency, texture_ext):
                     mat = bpy.data.materials.new(Materials_array[m].materialName)
                 mat.specular_shader = 'PHONG'
                 mat.use_fake_user = True
+
+                # 'alp_' should be rendered with alpha
+                # 'def_', 'skin_' should not be rendered with alpha
+                if ("alp" in Materials_array[m].materialName) or ("head" in Materials_array[m].materialName) or ("mouth" in Materials_array[m].materialName) or ("facial" in Materials_array[m].materialName) or ("AZA" in Materials_array[m].materialName) \
+                or ("alp" in Materials_array[m].color1Name) or ("head" in Materials_array[m].color1Name) or ("mouth" in Materials_array[m].color1Name) or ("facial" in Materials_array[m].color1Name) or ("AZA" in Materials_array[m].color1Name):
+                    image_transparency = True
+                else:
+                    image_transparency = False
+
+                mat.use_transparency = image_transparency
                 # Check and reuse existing same-name primary texture slot, or create it if it doesn't already exist
                 if (Materials_array[m].color1Name != ""):
                     if (bpy.data.textures.find(Materials_array[m].color1Name) > 0):
@@ -311,7 +321,7 @@ def importMaterials(MATName, image_transparency, texture_ext):
                         altTex = bpy.data.textures.new(Materials_array[m].color2Name, type='IMAGE')
 
                     altImg = image_utils.load_image(Materials_array[m].color2Name + texture_ext, dirPath, place_holder=True, check_existing=True, force_reload=True)
-                    altImg.use_alpha = image_transparency
+                    altImg.use_alpha = True # Often the case that secondary images overlaid on another have transparency
                     altTex.image = altImg
 
                     if (altTex.name not in mat.texture_slots):
@@ -611,7 +621,7 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                 try:
                     obj.parent = bpy.data.objects[armaName]
                     for bone in bpy.data.armatures[armaName].bones.values():
-                        obj.vertex_groups.new(bone.name)
+                        obj.vertex_groups.new(name=bone.name)
                     modifier = obj.modifiers.new(armaName, type="ARMATURE")
                     modifier.object = bpy.data.objects[armaName]
                 except:
@@ -710,7 +720,7 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
 
                 print(PolyGrp_array[p].visGroupName + " UV end: " + str(f.tell()))
                 # Search for duplicate UV coordinates and make them unique so that Blender will not remove them
-                if (len(UV_array) > 0):
+                if (use_uv_maps and len(UV_array) > 0):
                     for uvmap in UV_array.values():
                         for uvcoorda in range(0, len(uvmap) - 1):
                             count = uvcoorda
@@ -884,14 +894,10 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
     """Loads a NUMDLB file and imports data referenced from it"""
     bl_idname = ("screen.numdlb_import")
     bl_label = ("NUMDLB Import")
+    bl_options = {'UNDO'}
+
     filename_ext = ".numdlb"
     filter_glob = bpy.props.StringProperty(default="*.numdlb", options={'HIDDEN'})
-
-    image_transparency = bpy.props.BoolProperty(
-            name="Use Image Alpha",
-            description="Read image alpha channel to make images transparent",
-            default=True,
-            )
 
     use_vertex_colors = bpy.props.BoolProperty(
             name="Vertex Colors",
@@ -914,7 +920,7 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
     create_rest_action = bpy.props.BoolProperty(
             name="Backup Rest Pose",
             description="Create an action containing the rest pose",
-            default=True,
+            default=False,
             )
 
     auto_rotate = bpy.props.BoolProperty(
@@ -934,9 +940,9 @@ class NUMDLB_Import_Operator(bpy.types.Operator, ImportHelper):
                    (".jpg", "JPG", "Joint Photographic Expert Group"),
                    (".jpeg", "JPEG", "Joint Photographic Expert Group"),
                    (".jp2", "JP2", "Joint Photographic Expert Group 2000"),
-                   (".j2k", "J2K", "Joint Photographic Expert Group 2000"),
                    (".png", "PNG", "Portable Network Graphics"),
                    (".rgb", "RGB", "Iris"),
+                   (".sgi", "TGA", "Targa"),
                    (".tga", "TGA", "Targa"),
                    (".tif", "TIF", "Tagged Image File Format"),
                    (".tiff", "TIFF", "Tagged Image File Format")),
@@ -957,11 +963,12 @@ def menu_func_import(self, context):
     self.layout.operator(NUMDLB_Import_Operator.bl_idname, text="NUMDLB (.numdlb)")
 
 def register():
-    bpy.types.INFO_MT_file_import.append(menu_func_import)
     bpy.utils.register_module(__name__)
+    bpy.types.INFO_MT_file_import.append(menu_func_import)
 
 def unregister():
     bpy.types.INFO_MT_file_import.remove(menu_func_import)
+    bpy.utils.unregister_module(__name__)
 
 if __name__ == "__main__":
     register
