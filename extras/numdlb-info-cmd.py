@@ -1,4 +1,4 @@
-import io, mathutils, os, struct, sys, time
+import io, mathutils, os, struct, sys, time, argparse
 
 def reinterpretCastIntToFloat(int_val):
     return struct.unpack('f', struct.pack('I', int_val))[0]
@@ -111,7 +111,6 @@ BoneName_array = []
 PolyGrp_array = []
 WeightGrp_array = []
 print_debug_info = True
-texture_ext = ".png"
 
 def findUVImage(matNameQuery, useUVMap2):
     for mat in Materials_array:
@@ -184,6 +183,8 @@ def getModelInfo(filepath):
                     md.seek(MSHRet, 0)
                 if print_debug_info:
                     print(MODLGrp_array)
+            else:
+                raise RuntimeError("%s is not a valid NUMDLB file." % filepath)
 
 # Imports the materials
 def importMaterials(MATName):
@@ -259,10 +260,6 @@ def importMaterials(MATName):
                 Materials_array.append(pe)
                 mt.seek(MATRet, 0)
 
-            #for m in range(MATCount):
-            #    print(os.path.join(os.path.relpath(dirPath), Materials_array[m].color1Name + texture_ext))
-            #    print(Materials_array[m].color2Name == "")
-            #    print(os.path.join(os.path.relpath(dirPath), Materials_array[m].color2Name + texture_ext))
         if print_debug_info:
             print(Materials_array)
 
@@ -634,16 +631,72 @@ def importMeshes(MSHName):
                             Weight_array.append(WeightData([1], [1.0]))
 
                 #print(Weight_array)
-                #print(findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], False) + texture_ext)
-                #print(findUVImage(MODLGrp_array[PolyGrp_array[p].visGroupName], True) + texture_ext)
 
-modelpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/model/mario/c00/model.numdlb"
-#modelpath = "/opt/Smash Ultimate Models/fighter/packun/model/body/c00/model.numdlb"
+def main():
+    # get the args passed to blender after "--", all of which are ignored by
+    # blender so scripts may receive their own arguments
+    argv = sys.argv
 
-time_start = time.time()
-getModelInfo(modelpath)
+    if "--" not in argv:
+        argv = []  # as if no args are passed
+    else:
+        argv = argv[argv.index("--") + 1:]  # get all args after "--"
 
-importMaterials(MATName)
-importSkeleton(SKTName)
-importMeshes(MSHName)
-print("Done! Model import completed in " + str(round(time.time() - time_start, 4)) + " seconds.")
+    # When --help or no args are given, print this help
+    usage_text = (
+        "Retrieve information about NUMDLB, NUMATB, NUMSHB, and NUSKTB files:"
+        "  blender --background --python " + __file__ + " -- [options]"
+    )
+
+    parser = argparse.ArgumentParser(description=usage_text)
+
+    parser.add_argument(
+        "file", type=str,
+        help="The file to read model data from",
+    )
+
+    parser.add_argument(
+        "-t", "--time", action="store_true",
+        help="Display how much time reading model information took",
+    )
+
+    parser.add_argument(
+        "-nm", "--no-material", action="store_true",
+        help="Do not read material files (NUMATB)",
+    )
+
+    parser.add_argument(
+        "-ns", "--no-mesh", action="store_true",
+        help="Do not read mesh files (NUMSHB)",
+    )
+
+    parser.add_argument(
+        "-na", "--no-skeleton", action="store_true",
+        help="Do not read armature/skeleton files (NUSKTB)",
+    )
+
+    args = parser.parse_args(argv)
+    if not argv:
+        parser.print_help()
+        return
+
+    modelpath = args.file
+    if os.path.exists(modelpath):
+        if args.time:
+            time_start = time.time()
+        getModelInfo(modelpath)
+
+        if not args.no_material:
+            importMaterials(MATName)
+        if not args.no_skeleton:
+            importSkeleton(SKTName)
+        if not args.no_mesh:
+            importMeshes(MSHName)
+
+        if args.time:
+            print("Done! Model information read in " + str(round(time.time() - time_start, 4)) + " seconds.")
+    else:
+        print(modelpath + " does not lead to a valid file")
+
+if __name__ == "__main__":
+    main()

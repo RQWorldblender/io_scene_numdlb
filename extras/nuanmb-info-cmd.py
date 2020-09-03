@@ -1,4 +1,4 @@
-import enum, io, math, mathutils, os, struct, sys, time
+import enum, io, math, mathutils, os, struct, sys, time, argparse
 
 class AnimTrack:
     def __init__(self):
@@ -410,10 +410,49 @@ def readCompressedData(aq, track):
 
             track.animations.append(values)
 
-#animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a00wait1.nuanmb"
-#animpath = "/home/richard/Desktop/update-2.0.0/fighter/packun/motion/body/c00/a01turn.nuanmb"
-animpath = "/media/richard/3AEE25744CE0956E/Smash Ultimate Models/fighter/mario/motion/body/c00/a00wait1.nuanmb"
+def main():
+    # get the args passed to blender after "--", all of which are ignored by
+    # blender so scripts may receive their own arguments
+    argv = sys.argv
 
-time_start = time.time()
-getAnimationInfo(animpath)
-print("Done! All animations imported in " + str(round(time.time() - time_start, 4)) + " seconds.")
+    if "--" not in argv:
+        argv = []  # as if no args are passed
+    else:
+        argv = argv[argv.index("--") + 1:]  # get all args after "--"
+
+    # When --help or no args are given, print this help
+    usage_text = (
+        "Retrieve information about NUANMB files:"
+        "  blender --background --python " + __file__ + " -- [options]"
+    )
+
+    parser = argparse.ArgumentParser(description=usage_text)
+
+    parser.add_argument(
+        "file", type=str,
+        help="The file to read model data from",
+    )
+
+    parser.add_argument(
+        "-t", "--time", action="store_true",
+        help="Display how much time reading model information took",
+    )
+
+    args = parser.parse_args(argv)
+    if not argv:
+        parser.print_help()
+        return
+
+    animpath = args.file
+    if os.path.exists(animpath):
+        if args.time:
+            time_start = time.time()
+        getAnimationInfo(animpath)
+
+        if args.time:
+            print("Done! Animation information read in " + str(round(time.time() - time_start, 4)) + " seconds.")
+    else:
+        print(animpath + " does not lead to a valid file")
+
+if __name__ == "__main__":
+    main()
