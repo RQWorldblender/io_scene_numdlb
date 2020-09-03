@@ -332,9 +332,11 @@ def importMaterials(MATName, use_emissive_maps, use_prm_maps, use_normal_maps, t
                         nor_out_node = nodes.new(type="ShaderNodeCombineRGB")
                         links.new(nor_in_node.outputs["R"], nor_out_node.inputs["R"])
                         links.new(nor_in_node.outputs["G"], nor_out_node.inputs["G"])
+                        nor_out_node.inputs["B"].default_value = 1.0
                         
                         nor_node = nodes.new(type="ShaderNodeNormalMap")
                         links.new(nor_out_node.outputs["Image"], nor_node.inputs["Color"])
+                        nor_node.uv_map = "UVMap"
                         
                         links.new(nor_node.outputs["Normal"], principled_node.inputs["Normal"])
 
@@ -370,7 +372,7 @@ def importMaterials(MATName, use_emissive_maps, use_prm_maps, use_normal_maps, t
                         ao_node.blend_type = 'MULTIPLY'
                         links.new(tex1_node.outputs["Color"], ao_node.inputs["Color1"])
                         links.new(prm_node.outputs["B"], ao_node.inputs["Color2"])
-
+                        ao_node.inputs["Fac"].default_value = 1.0
 
                     if (Materials_array[m].color2Name != ""):
                         # tex_fname_2 is overlaid on top of tex_fname_1
