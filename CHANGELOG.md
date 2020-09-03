@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2020-09-03 (Backport release)
+* Image alpha determined by specific keywords (most commonly "alp") in material names and/or texture names, instead of being set unilaterally for every texture. The option to unilaterally set image alpha has been subsequently removed.
+* Image transparency also affects material transparency.
+* Added undo history support.
+* No longer create rest poses, as they are already embedded per armature during import.
+* Unregister scripts when they are disabled.
+* Other coding practices found in the 2.80+ versions appear in this backport.
+
 ## [1.3.2] - 2019-05-06
 * Fix how vertex indices are determined when importing vertices. This prevents vertex weights from being shared unintentionally with multiple vertices in the same location.
 * Removed the remove_doubles option, as this operation would interfere with the above change and cause animations to distort certain models.
