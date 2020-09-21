@@ -858,7 +858,7 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                                 if (RigBoneName == bpy.data.armatures[armaName].bones[b].name):
                                     RigBoneID = b
 
-                            if (RigBoneID == 0):
+                            if (RigBoneID == 0) and len(bpy.data.armatures[armaName].bones) > 1:
                                 print(RigBoneName + " doesn't exist on " + PolyGrp_array[p].visGroupName + "! Transferring rigging to " + bpy.data.armatures[armaName].bones[1].name + ".")
                                 RigBoneID = 1
 
@@ -949,8 +949,8 @@ def importMeshes(context, MSHName, texture_ext, use_vertex_colors, use_uv_maps, 
                         continue
 
                 # Apply matrix transformation to single-binding meshes
-                if (PolyGrp_array[p].singleBindName != ""):
-                    singlebone = PolyGrp_array[p].singleBindName
+                singlebone = PolyGrp_array[p].singleBindName
+                if (singlebone != "") and singlebone in bpy.data.armatures[armaName].bones:
                     obj['singlebind'] = singlebone
                     obj.matrix_world = BoneTrsArray[singlebone]
 
