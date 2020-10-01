@@ -1,18 +1,5 @@
 #!BPY
 
-"""
-Name: 'Super Smash Bros. Ultimate Model Importer (.numdlb)...'
-Blender: 277
-Group: 'Import'
-Tooltip: 'Import *.NUMDLB (.numdlb)'
-"""
-
-__author__ = ["Richard Qian (Worldblender)", "Random Talking Bush", "Ploaj"]
-__url__ = ["https://gitlab.com/Worldblender/io_scene_numdlb"]
-__version__ = "2.0.1"
-__bpydoc__ = """\
-"""
-
 bl_info = {
     "name": "Super Smash Bros. Ultimate Model Importer",
     "description": "Imports data referenced by NUMDLB files (binary model format used by some games developed by Bandai-Namco)",
@@ -29,41 +16,8 @@ bl_info = {
 import bmesh, bpy, math, mathutils, os, struct, sys, time
 from bpy_extras import image_utils, node_shader_utils
 
-def reinterpretCastIntToFloat(int_val):
-    return struct.unpack('f', struct.pack('I', int_val))[0]
-
 def decompressHalfFloat(bytes):
-    if sys.version_info[0] == 3 and sys.version_info[1] > 5:
-        return struct.unpack("<e", bytes)[0]
-    else:
-        float16 = int(struct.unpack('<H', bytes)[0])
-        # sign
-        s = (float16 >> 15) & 0x00000001
-        # exponent
-        e = (float16 >> 10) & 0x0000001f
-        # fraction
-        f = float16 & 0x000003ff
-
-        if e == 0:
-            if f == 0:
-                return reinterpretCastIntToFloat(int(s << 31))
-            else:
-                while not (f & 0x00000400):
-                    f = f << 1
-                    e -= 1
-                e += 1
-                f &= ~0x00000400
-                #print(s,e,f)
-        elif e == 31:
-            if f == 0:
-                return reinterpretCastIntToFloat(int((s << 31) | 0x7f800000))
-            else:
-                return reinterpretCastIntToFloat(int((s << 31) | 0x7f800000 |
-                    (f << 13)))
-
-        e = e + (127 -15)
-        f = f << 13
-        return reinterpretCastIntToFloat(int((s << 31) | (e << 23) | f))
+    return struct.unpack("<e", bytes)[0]
 
 class MaterialData:
     def __init__(self):

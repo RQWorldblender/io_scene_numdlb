@@ -1,18 +1,5 @@
 #!BPY
 
-"""
-Name: 'Super Smash Bros. Ultimate Animation Importer (.nuanmb)...'
-Blender: 277
-Group: 'Import'
-Tooltip: 'Import *.NUANMB (.nuanmb)'
-"""
-
-__author__ = ["Richard Qian (Worldblender)", "Ploaj"]
-__url__ = ["https://gitlab.com/Worldblender/io_scene_numdlb"]
-__version__ = "2.0.1"
-__bpydoc__ = """\
-"""
-
 bl_info = {
     "name": "Super Smash Bros. Ultimate Animation Importer",
     "description": "Imports animation data from NUANMB files (binary animation format used by some games developed by Bandai-Namco)",
